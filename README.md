@@ -1,44 +1,83 @@
 # 🛡️ Border Safety Risk Checker
 
-A full-stack web application for civilians in Thai border provinces to check their proximity risk to Cambodia artillery ranges (BM-21 and PHL-03).
+ระบบเตือนภัยและตรวจสอบความเสี่ยงสำหรับพลเรือนในพื้นที่ชายแดนไทย-กัมพูชา
 
-![Risk Zones](https://img.shields.io/badge/BM--21-52km-orange)
-![Risk Zones](https://img.shields.io/badge/PHL--03-130km-yellow)
-![Tech](https://img.shields.io/badge/React-18-blue)
-![Tech](https://img.shields.io/badge/Express-4-green)
-
-> ⚠️ **DISCLAIMER**: This is an approximate risk model using simplified GeoJSON data. Always follow official civil defence guidance from Thai government authorities.
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)
+![Express](https://img.shields.io/badge/Express-4-000000?logo=express)
+![License](https://img.shields.io/badge/License-MIT-green)
 
 ---
 
-## 🎯 Features
+## 🎯 เป้าหมายของโปรเจกต์
 
-- **Location Detection**: Auto GPS, IP-based, or manual coordinate input
-- **Risk Zone Classification**:
-  - 🔴 **High Danger** (<20km from border)
-  - 🟠 **BM-21 Range** (≤52km) - Grad rocket launcher range
-  - 🟡 **PHL-03 Range** (≤130km) - Long-range MLRS
-  - 🟢 **Safe** (>130km from border)
-- **Interactive Map**: Leaflet-based with province overlays and danger radii
-- **Bilingual UI**: English + Thai (ไทย)
-- **Emergency Panel**: Placeholder for civil defence instructions
-- **REST API**: Versioned endpoints for location checking
+แอปพลิเคชันนี้พัฒนาขึ้นเพื่อให้ประชาชนในพื้นที่จังหวัดตราดและจังหวัดชายแดนสามารถ:
+
+- **ตรวจสอบระยะห่างจากชายแดน** และประเมินความเสี่ยงจากอาวุธยิงระยะไกล
+- **รับการแจ้งเตือน** และข้อมูลสถานการณ์ตามระดับภัยคุกคาม
+- **ส่งสัญญาณ SOS** ในกรณีฉุกเฉิน
+- **ใช้งานแผนที่** เพื่อวางแผนเส้นทางหนีภัย
 
 ---
 
-## 🚀 Quick Start
+## ✅ ความสามารถที่พัฒนาแล้ว
+
+### 📍 Location & Risk Detection
+
+- ตรวจจับตำแหน่งอัตโนมัติ (GPS, IP-based)
+- ใส่พิกัดด้วยตัวเอง
+- คำนวณระยะห่างจากชายแดนด้วย Turf.js
+- จำแนกโซนความเสี่ยง 4 ระดับ:
+  - 🔴 **อันตรายสูง** (<20km)
+  - 🟠 **ระยะ BM-21** (≤52km)
+  - 🟡 **ระยะ PHL-03** (≤130km)
+  - 🟢 **ปลอดภัย** (>130km)
+
+### 🗺️ Interactive Map
+
+- แผนที่ Leaflet พร้อมข้อมูล GeoJSON
+- แสดงรัศมีอันตรายและขอบเขตจังหวัด
+- Markers แสดงตำแหน่งปัจจุบัน
+
+### 👨‍👩‍👧‍👦 Family System
+
+- ลงทะเบียนสมาชิกครอบครัว
+- ติดตามสถานะสมาชิก
+- ส่ง SOS ถึงครอบครัว
+
+### 🚨 SOS & Alert System
+
+- ปุ่ม SOS พร้อมส่ง GPS Location
+- บันทึกรายงานและเหตุการณ์
+- แจ้งเตือนแบบ Real-time
+
+### 👮 Admin Dashboard
+
+- แผงควบคุมสำหรับผู้ดูแลระบบ
+- ดูรายการ SOS และรายงานสด
+- จัดการข้อความประกาศ (Broadcasts)
+- กรองข้อมูลตามอำเภอ
+
+### 🔐 Authentication
+
+- ระบบล็อกอินสำหรับผู้ใช้งาน
+- ระบบล็อกอินแยกสำหรับ Admin
+- Session management พร้อม expiry
+
+---
+
+## 🚀 วิธีใช้งานเบื้องต้น
 
 ### Prerequisites
 
 - Node.js 18+
-- npm or yarn
+- npm
 
 ### Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/LethimCookMyBro/WebFor_ChaiDean.git
-cd border-safety-risk-checker
+git clone <repository-url>
+cd KuyHunsen
 
 # Install all dependencies
 npm install
@@ -47,252 +86,72 @@ npm install
 npm run dev
 ```
 
-The application will be available at:
+### URLs
 
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:3001
-
----
-
-## 📁 Project Structure
-
-```
-border-safety-risk-checker/
-├── package.json              # Root config with dev scripts
-├── README.md
-├── Dockerfile
-├── backend/
-│   ├── server.js             # Express server
-│   ├── riskCalculator.js     # Risk zone logic
-│   ├── sendAlert.js          # Notification stub
-│   ├── routes/
-│   │   ├── health.js         # GET /api/health
-│   │   └── v1/
-│   │       ├── locate.js     # POST /api/v1/locate
-│   │       └── status.js     # GET /api/v1/status
-│   └── data/
-│       ├── border_provinces.geojson
-│       ├── border_line.geojson
-│       └── subdistrict_centroids.json
-└── frontend/
-    ├── index.html
-    ├── vite.config.js
-    ├── tailwind.config.js
-    └── src/
-        ├── App.jsx
-        ├── index.css
-        ├── components/
-        │   ├── LocationInput.jsx
-        │   ├── RiskDisplay.jsx
-        │   ├── StatusBanner.jsx
-        │   └── EmergencyPanel.jsx
-        ├── map/
-        │   └── RiskMap.jsx
-        └── pages/
-            └── HomePage.jsx
-```
-
----
-
-## 🔧 Tech Architecture
-
-### Backend
-
-| Technology | Purpose                      |
-| ---------- | ---------------------------- |
-| Express.js | REST API server              |
-| Turf.js    | Geospatial calculations      |
-| Morgan     | Request logging              |
-| request-ip | Client IP detection          |
-| Axios      | IP geolocation service calls |
-
-### Frontend
-
-| Technology    | Purpose                    |
-| ------------- | -------------------------- |
-| React 18      | UI framework               |
-| Vite          | Build tool                 |
-| TailwindCSS   | Styling                    |
-| Leaflet       | Interactive maps           |
-| React-Leaflet | React bindings for Leaflet |
+- **Frontend**: http://localhost:5173
+- **Backend API**: http://localhost:3001
 
 ---
 
 ## 📡 API Endpoints
 
-### Health Check
-
-```
-GET /api/health
-Response: { status: "ok", timestamp: "..." }
-```
-
-### Locate & Calculate Risk
-
-```
-POST /api/v1/locate
-Content-Type: application/json
-
-# Using GPS coordinates
-{ "lat": 14.5, "lon": 103.5 }
-
-# Using IP address
-{ "ip": "8.8.8.8" }
-
-Response:
-{
-  "lat": 14.5,
-  "lon": 103.5,
-  "distance_km": 45.23,
-  "zone": "bm21_range",
-  "zone_info": {...},
-  "province": {...}
-}
-```
-
-### System Status
-
-```
-GET /api/v1/status
-Response: { status: "operational", config: {...} }
-```
-
----
-
-## 🔄 Replacing the Geolocation Service
-
-The default IP geolocation uses [ip-api.com](http://ip-api.com) (free tier). To replace:
-
-1. Edit `backend/routes/v1/locate.js`
-2. Modify the `resolveIpLocation()` function:
-
-```javascript
-// Example: Using ipinfo.io
-async function resolveIpLocation(ip) {
-  const response = await axios.get(`https://ipinfo.io/${ip}?token=YOUR_TOKEN`);
-  const [lat, lon] = response.data.loc.split(",");
-  return {
-    success: true,
-    coordinates: { lat: parseFloat(lat), lon: parseFloat(lon) },
-  };
-}
-```
-
-Alternative services:
-
-- [ipinfo.io](https://ipinfo.io)
-- [MaxMind GeoIP2](https://www.maxmind.com)
-- [ipgeolocation.io](https://ipgeolocation.io)
+| Method | Endpoint                  | Description                      |
+| ------ | ------------------------- | -------------------------------- |
+| GET    | `/api/health`             | Health check                     |
+| POST   | `/api/v1/locate`          | ตรวจสอบตำแหน่งและคำนวณความเสี่ยง |
+| GET    | `/api/v1/status`          | สถานะระบบ                        |
+| POST   | `/api/v1/family/register` | ลงทะเบียนสมาชิก                  |
+| POST   | `/api/v1/family/sos`      | ส่ง SOS                          |
+| GET    | `/api/v1/family/alerts`   | ดึงการแจ้งเตือน                  |
+| POST   | `/api/v1/reports`         | ส่งรายงานเหตุการณ์               |
 
 ---
 
 ## 🚢 Deployment
 
-### Netlify (Frontend) + Railway (Backend)
-
-**Frontend on Netlify:**
-
-```bash
-cd frontend
-npm run build
-# Deploy 'dist' folder to Netlify
-```
-
-Add `_redirects` file for SPA:
-
-```
-/*    /index.html   200
-```
-
-**Backend on Railway:**
-
-```bash
-cd backend
-# Railway auto-detects Node.js and runs npm start
-```
-
-### Vercel (Full-Stack)
-
-```bash
-# vercel.json
-{
-  "builds": [
-    { "src": "backend/server.js", "use": "@vercel/node" },
-    { "src": "frontend/package.json", "use": "@vercel/static-build" }
-  ]
-}
-```
-
 ### Docker
 
 ```bash
-# Build image
 docker build -t border-safety-checker .
-
-# Run container
 docker run -p 3001:3001 border-safety-checker
 ```
 
----
+### Cloud Platforms
 
-## 📊 Risk Model Explanation
-
-### Artillery Systems
-
-| System     | Origin      | Max Range | Risk Classification |
-| ---------- | ----------- | --------- | ------------------- |
-| BM-21 Grad | Russia/USSR | ~52 km    | 🟠 Moderate-High    |
-| PHL-03     | China       | ~130 km   | 🟡 Moderate         |
-
-### Zone Thresholds
-
-```
-Distance < 20 km  → HIGH DANGER (immediate threat)
-Distance ≤ 52 km  → BM-21 RANGE
-Distance ≤ 130 km → PHL-03 RANGE
-Distance > 130 km → SAFE (outside known ranges)
-```
-
-### Limitations
-
-- GeoJSON data is **simplified approximations**
-- Border line is not official surveyed data
-- Artillery ranges are theoretical maximums
-- Does not account for terrain, weather, or actual military positions
-
-For production use, integrate with:
-
-- Thai Royal Survey Department geodata
-- Real-time military intelligence feeds
-- Official civil defence alert systems
+- **Frontend**: Vercel, Netlify
+- **Backend**: Railway, Render, Fly.io
 
 ---
 
-## 🔐 Security Considerations
+## 📈 คุณสมบัติที่วางแผนพัฒนาต่อ
 
-- CORS configured for specific origins
-- Input validation on all coordinates
-- IP resolution fallback prevents service disruption
-- No PII stored on server
+- [ ] Push Notifications (PWA)
+- [ ] Offline Mode & Local Caching
+- [ ] Multi-language Support (EN/TH/KH)
+- [ ] ระบบแจ้งเตือนผ่าน LINE Notify
+- [ ] Real-time Dashboard (WebSocket)
+- [ ] Export Reports (PDF/CSV)
+- [ ] Integration กับระบบแจ้งเตือนภัยของรัฐ
+- [ ] Mobile App (React Native)
+
+---
+
+## 🆘 เบอร์ฉุกเฉิน (ประเทศไทย)
+
+| บริการ           | หมายเลข |
+| ---------------- | ------- |
+| แจ้งเหตุฉุกเฉิน  | 191     |
+| รถพยาบาล         | 1669    |
+| ดับเพลิง         | 199     |
+| ตำรวจท่องเที่ยว  | 1155    |
+| ป้องกันภัยพิบัติ | 1784    |
 
 ---
 
 ## 📜 License
 
-MIT License - See [LICENSE](LICENSE) for details.
+MIT License - ดูรายละเอียดใน [LICENSE](LICENSE)
 
 ---
 
-## 🆘 Emergency Contacts (Thailand)
-
-| Service             | Number |
-| ------------------- | ------ |
-| Emergency           | 191    |
-| Ambulance           | 1669   |
-| Fire                | 199    |
-| Tourist Police      | 1155   |
-| Disaster Prevention | 1784   |
-
----
-
-**Built for civilian safety awareness. Not affiliated with any government agency.**
+> ⚠️ **ข้อสังเกต**: ระบบนี้ใช้ข้อมูลประมาณการ ไม่ใช่ข้อมูลทางการจากหน่วยงานราชการ กรุณาติดตามประกาศอย่างเป็นทางการจากหน่วยงานป้องกันภัยพลเรือน
