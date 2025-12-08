@@ -1,115 +1,246 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --danger-high: #dc2626;
-  --danger-bm21: #ea580c;
-  --danger-phl03: #ca8a04;
-  --safe: #16a34a;
+  --danger-critical: #DC2626;
+  --danger-high: #EA580C;
+  --danger-moderate: #F59E0B;
+  --danger-low: #84CC16;
+  --safe: #22C55E;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   margin: 0;
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    Oxygen, Ubuntu, sans-serif;
+  font-family: 'Noto Sans Thai', 'Sarabun', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  background: #f1f5f9;
   min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Safe area padding for notched devices */
+.safe-area-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #1e293b;
+  background: #e2e8f0;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #475569;
-  border-radius: 4px;
+  background: #94a3b8;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: #64748b;
 }
 
-/* Map container */
-.leaflet-container {
-  height: 100%;
-  width: 100%;
-  border-radius: 12px;
+/* Animations */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
-/* Danger zone styles */
-.zone-high-danger {
-  background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
-  animation: pulse 2s ease-in-out infinite;
+@keyframes ping {
+  75%, 100% {
+    transform: scale(2);
+    opacity: 0;
+  }
 }
 
-.zone-bm21 {
-  background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
-}
-
-.zone-phl03 {
-  background: linear-gradient(135deg, #ca8a04 0%, #a16207 100%);
-}
-
-.zone-safe {
-  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
-}
-
-/* Glassmorphism panels */
-.glass-panel {
-  background: rgba(15, 23, 42, 0.8);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-}
-
-/* Button styles */
-.btn-primary {
-  @apply px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-xl 
-         hover:from-blue-700 hover:to-blue-800 transition-all duration-300 transform hover:scale-105
-         shadow-lg hover:shadow-blue-500/25 active:scale-95;
-}
-
-.btn-danger {
-  @apply px-6 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white font-semibold rounded-xl 
-         hover:from-red-700 hover:to-red-800 transition-all duration-300 transform hover:scale-105
-         shadow-lg hover:shadow-red-500/25 active:scale-95;
-}
-
-/* Input styles */
-.input-field {
-  @apply w-full px-4 py-3 bg-slate-800/50 border border-slate-600 rounded-xl text-white 
-         placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-         transition-all duration-200;
-}
-
-/* Loading animation */
 @keyframes spin {
   to {
     transform: rotate(360deg);
   }
 }
 
-.loading-spinner {
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-ping {
+  animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.animate-spin {
   animation: spin 1s linear infinite;
 }
 
-/* Responsive map height */
-@media (max-width: 768px) {
-  .map-container {
-    height: 300px !important;
+/* Button styles */
+button {
+  touch-action: manipulation;
+}
+
+/* Select styles for mobile */
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 1.5em 1.5em;
+  padding-right: 2.5rem;
+}
+
+/* Focus styles */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Active states for touch */
+button:active {
+  transform: scale(0.98);
+}
+
+/* Prevent text selection during drag */
+.no-select {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Card hover effects */
+.card-hover {
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Loading skeleton */
+.skeleton {
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
   }
 }
 
-@media (min-width: 769px) {
-  .map-container {
-    height: 500px !important;
+/* Toast notification */
+.toast {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e293b;
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 9999;
+  animation: toast-in 0.3s ease;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
   }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 640px) {
+  .text-5xl {
+    font-size: 2.5rem;
+  }
+  
+  .p-4 {
+    padding: 0.875rem;
+  }
+}
+
+/* Prevent overscroll bounce on iOS */
+html {
+  overscroll-behavior: none;
+}
+
+/* Bottom navigation shadow */
+.bottom-nav-shadow {
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
+}
+
+/* Progress ring animation */
+@keyframes progress-ring {
+  from {
+    stroke-dashoffset: 289;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Danger pulse for critical alerts */
+@keyframes danger-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(220, 38, 38, 0);
+  }
+}
+
+.danger-pulse {
+  animation: danger-pulse 2s infinite;
+}
+
+/* Map styles */
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+  border-radius: 12px;
+}
+
+/* Disable zoom on double tap for iOS */
+* {
+  touch-action: pan-x pan-y;
 }
