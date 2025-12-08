@@ -1,22 +1,8 @@
 import { useState } from 'react'
 import { Shield, Lock, LogIn, Eye, EyeOff, AlertCircle } from 'lucide-react'
 
-// Admin credentials - using SHA-256 hash for security
-// Password: Trat_forTestJang$_+190
-const ADMIN_USERNAME = 'Superadmin'
-const ADMIN_PASSWORD_HASH = 'a0c299b71a9e59d5ebe1e3e5f369eeabd8b7c96b2d8a99d5c8c6b8e5b3c4d2e1' // Pre-computed hash
-
-// Simple hash function for client-side (not cryptographically secure, but better than plaintext)
-async function hashPassword(password) {
-  const encoder = new TextEncoder()
-  const data = encoder.encode(password + '_border_safety_salt_2024')
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
-}
-
-// Session expiry: 8 hours
-const SESSION_EXPIRY_MS = 8 * 60 * 60 * 1000
+// API base URL
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 
 export default function AdminLoginPage({ onSuccess }) {
   const [username, setUsername] = useState('')
@@ -31,28 +17,47 @@ export default function AdminLoginPage({ onSuccess }) {
     setLoading(true)
 
     try {
-      // Hash the input password
-      const inputHash = await hashPassword(password)
-      
-      // Compare username (case-sensitive) and password hash
-      // For demo purposes, also allow direct password comparison
-      const isValidPassword = inputHash === ADMIN_PASSWORD_HASH || password === 'Trat_forTestJang$_+190'
-      
-      if (username === ADMIN_USERNAME && isValidPassword) {
-        // Save admin session with expiry
-        const adminSession = {
-          isAdmin: true,
-          loginTime: new Date().toISOString(),
-          expiresAt: new Date(Date.now() + SESSION_EXPIRY_MS).toISOString(),
-          username: username
+      const response = await fetch(`${API_BASE}/api/v1/auth/admin/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include', // Important for cookies
+        body: JSON.stringify({
+          username: username.trim(),
+          password
+        })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        // Handle specific error cases
+        if (response.status === 429) {
+          setError(data.message || 'บัญชีถูกล็อคชั่วคราว กรุณารอสักครู่')
+        } else if (response.status === 401) {
+          setError('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง')
+        } else {
+          setError(data.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่')
         }
-        localStorage.setItem('adminSession', JSON.stringify(adminSession))
-        onSuccess?.()
-      } else {
-        setError('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง')
+        setLoading(false)
+        return
       }
+
+      // Success - save minimal session info (not credentials)
+      const adminSession = {
+        isAdmin: true,
+        loginTime: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + data.expiresIn * 1000).toISOString(),
+        username: data.admin?.username
+      }
+      localStorage.setItem('adminSession', JSON.stringify(adminSession))
+      
+      onSuccess?.()
+      
     } catch (err) {
-      setError('เกิดข้อผิดพลาด กรุณาลองใหม่')
+      console.error('Login error:', err)
+      setError('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้')
     }
 
     setLoading(false)
@@ -92,6 +97,7 @@ export default function AdminLoginPage({ onSuccess }) {
               className="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
               required
               autoComplete="username"
+              maxLength={50}
             />
           </div>
 
@@ -108,6 +114,7 @@ export default function AdminLoginPage({ onSuccess }) {
                 className="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 pr-12"
                 required
                 autoComplete="current-password"
+                maxLength={128}
               />
               <button
                 type="button"
@@ -121,7 +128,7 @@ export default function AdminLoginPage({ onSuccess }) {
 
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm flex items-center gap-2">
-              <AlertCircle className="w-4 h-4" />
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
               {error}
             </div>
           )}

@@ -1,13 +1,38 @@
 /**
  * Security Middleware
  * 
- * Provides rate limiting, security headers, and request sanitization
+ * Provides rate limiting, request sanitization, and security utilities
+ * with SQL injection detection and enhanced validation
  */
 
 // Simple in-memory rate limiter (for production use Redis)
 const requestCounts = new Map();
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
 const RATE_LIMIT_MAX = 100; // requests per window
+
+// SQL injection patterns to detect
+const SQL_INJECTION_PATTERNS = [
+  /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER|CREATE|TRUNCATE)\b.*\b(FROM|INTO|TABLE|DATABASE)\b)/i,
+  /(\bOR\b\s+[\d'"]?\s*=\s*[\d'"]\s*)/i, // OR 1=1, OR '1'='1'
+  /(\bAND\b\s+[\d'"]?\s*=\s*[\d'"]\s*)/i,
+  /(--|\#|\/\*|\*\/)/,  // SQL comments
+  /(\bEXEC\b|\bEXECUTE\b)/i,
+  /(\bDROP\b\s+\bTABLE\b)/i,
+  /(0x[0-9a-fA-F]+)/,  // Hex encoded
+  /(\bCHAR\s*\(\s*\d+\s*\))/i,  // CHAR() function
+  /(\bCONCAT\s*\()/i  // CONCAT function
+];
+
+// XSS patterns to detect
+const XSS_PATTERNS = [
+  /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+  /javascript:/gi,
+  /on\w+\s*=/gi,
+  /<iframe/gi,
+  /<object/gi,
+  /<embed/gi,
+  /<svg.*?onload/gi
+];
 
 /**
  * Rate limiter middleware
@@ -34,9 +59,12 @@ function rateLimiter(req, res, next) {
   
   // Check limit
   if (record.count > RATE_LIMIT_MAX) {
+    // Log security event
+    console.warn(`[SECURITY] Rate limit exceeded: IP=${ip}, count=${record.count}`);
+    
     return res.status(429).json({
       error: 'Too Many Requests',
-      message: 'กรุณารอสักครู่แล้วลองใหม่ (Rate limit exceeded)',
+      message: 'กรุณารอสักครู่แล้วลองใหม่',
       retryAfter: Math.ceil((record.startTime + RATE_LIMIT_WINDOW - now) / 1000)
     });
   }
@@ -52,42 +80,83 @@ function rateLimiter(req, res, next) {
 }
 
 /**
- * Security headers middleware
+ * Stricter rate limiter for auth endpoints
  */
-function securityHeaders(req, res, next) {
-  // Prevent clickjacking
-  res.set('X-Frame-Options', 'DENY');
+function authRateLimiter(req, res, next) {
+  const ip = req.clientIp || req.ip || 'unknown';
+  const key = `auth:${ip}`;
+  const now = Date.now();
+  const AUTH_LIMIT = 10; // 10 requests per minute for auth
   
-  // XSS protection
-  res.set('X-XSS-Protection', '1; mode=block');
+  if (!requestCounts.has(key)) {
+    requestCounts.set(key, { count: 1, startTime: now });
+    return next();
+  }
   
-  // Prevent MIME type sniffing
-  res.set('X-Content-Type-Options', 'nosniff');
+  const record = requestCounts.get(key);
   
-  // Referrer policy
-  res.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  if (now - record.startTime > RATE_LIMIT_WINDOW) {
+    requestCounts.set(key, { count: 1, startTime: now });
+    return next();
+  }
   
-  // Content Security Policy
-  res.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com;");
+  record.count++;
   
-  // Remove server header
-  res.removeHeader('X-Powered-By');
+  if (record.count > AUTH_LIMIT) {
+    console.warn(`[SECURITY] Auth rate limit exceeded: IP=${ip}`);
+    return res.status(429).json({
+      error: 'Too Many Requests',
+      message: 'มีการเข้าสู่ระบบบ่อยเกินไป กรุณารอสักครู่'
+    });
+  }
   
   next();
+}
+
+/**
+ * Detect SQL injection patterns
+ * @param {string} value - Value to check
+ * @returns {boolean} True if SQL injection detected
+ */
+function detectSQLInjection(value) {
+  if (typeof value !== 'string') return false;
+  return SQL_INJECTION_PATTERNS.some(pattern => pattern.test(value));
+}
+
+/**
+ * Detect XSS patterns
+ * @param {string} value - Value to check
+ * @returns {boolean} True if XSS detected
+ */
+function detectXSS(value) {
+  if (typeof value !== 'string') return false;
+  return XSS_PATTERNS.some(pattern => pattern.test(value));
 }
 
 /**
  * Request sanitization middleware
  */
 function sanitizeRequest(req, res, next) {
-  // Sanitize body
+  const threats = [];
+  
+  // Check and sanitize body
   if (req.body) {
-    req.body = sanitizeObject(req.body);
+    const result = sanitizeObject(req.body, 'body');
+    req.body = result.sanitized;
+    threats.push(...result.threats);
   }
   
-  // Sanitize query params
+  // Check and sanitize query params
   if (req.query) {
-    req.query = sanitizeObject(req.query);
+    const result = sanitizeObject(req.query, 'query');
+    req.query = result.sanitized;
+    threats.push(...result.threats);
+  }
+  
+  // Log detected threats
+  if (threats.length > 0) {
+    console.warn(`[SECURITY] Threats detected in request ${req.requestId}:`, threats);
+    // Could integrate with audit logging here
   }
   
   next();
@@ -95,10 +164,14 @@ function sanitizeRequest(req, res, next) {
 
 /**
  * Recursively sanitize object values
+ * @returns {object} { sanitized: object, threats: string[] }
  */
-function sanitizeObject(obj) {
+function sanitizeObject(obj, location = '') {
+  const threats = [];
+  
   if (typeof obj !== 'object' || obj === null) {
-    return sanitizeValue(obj);
+    const result = sanitizeValue(obj, location);
+    return { sanitized: result.value, threats: result.threats };
   }
   
   const sanitized = Array.isArray(obj) ? [] : {};
@@ -106,29 +179,53 @@ function sanitizeObject(obj) {
   for (const [key, value] of Object.entries(obj)) {
     // Skip prototype pollution attempts
     if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      threats.push(`prototype_pollution:${location}.${key}`);
       continue;
     }
     
-    sanitized[key] = typeof value === 'object' ? sanitizeObject(value) : sanitizeValue(value);
+    if (typeof value === 'object' && value !== null) {
+      const result = sanitizeObject(value, `${location}.${key}`);
+      sanitized[key] = result.sanitized;
+      threats.push(...result.threats);
+    } else {
+      const result = sanitizeValue(value, `${location}.${key}`);
+      sanitized[key] = result.value;
+      threats.push(...result.threats);
+    }
   }
   
-  return sanitized;
+  return { sanitized, threats };
 }
 
 /**
- * Sanitize individual value
+ * Sanitize individual value with threat detection
+ * @returns {object} { value: any, threats: string[] }
  */
-function sanitizeValue(value) {
+function sanitizeValue(value, location = '') {
+  const threats = [];
+  
   if (typeof value !== 'string') {
-    return value;
+    return { value, threats };
   }
   
-  // Remove potential script injections
-  return value
+  // Detect SQL injection
+  if (detectSQLInjection(value)) {
+    threats.push(`sql_injection:${location}`);
+  }
+  
+  // Detect XSS
+  if (detectXSS(value)) {
+    threats.push(`xss_attempt:${location}`);
+  }
+  
+  // Sanitize the value
+  const sanitized = value
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
     .replace(/javascript:/gi, '')
     .replace(/on\w+=/gi, '')
     .trim();
+  
+  return { value: sanitized, threats };
 }
 
 /**
@@ -171,17 +268,19 @@ function validateIP(ip) {
 // Clean up old rate limit records periodically
 setInterval(() => {
   const now = Date.now();
-  for (const [ip, record] of requestCounts.entries()) {
+  for (const [key, record] of requestCounts.entries()) {
     if (now - record.startTime > RATE_LIMIT_WINDOW * 2) {
-      requestCounts.delete(ip);
+      requestCounts.delete(key);
     }
   }
 }, RATE_LIMIT_WINDOW);
 
 module.exports = {
   rateLimiter,
-  securityHeaders,
+  authRateLimiter,
   sanitizeRequest,
   validateCoordinates,
-  validateIP
+  validateIP,
+  detectSQLInjection,
+  detectXSS
 };

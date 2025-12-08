@@ -120,23 +120,29 @@ async function resolveIpLocation(ip) {
       return { success: false, coordinates: null, reason: 'Private IP address' };
     }
 
-    const response = await axios.get(`http://ip-api.com/json/${ip}`, {
-      timeout: 5000
+    // Use HTTPS endpoint for secure communication
+    const apiUrl = process.env.IP_GEO_API_URL || 'https://ipapi.co';
+    const response = await axios.get(`${apiUrl}/${ip}/json/`, {
+      timeout: 5000,
+      headers: {
+        'User-Agent': 'BorderSafetyApp/2.0'
+      }
     });
 
-    if (response.data && response.data.status === 'success') {
+    // ipapi.co returns different format than ip-api.com
+    if (response.data && !response.data.error) {
       return {
         success: true,
         coordinates: {
-          lat: response.data.lat,
-          lon: response.data.lon
+          lat: response.data.latitude,
+          lon: response.data.longitude
         },
         city: response.data.city,
-        country: response.data.country
+        country: response.data.country_name
       };
     }
 
-    return { success: false, coordinates: null, reason: response.data.message };
+    return { success: false, coordinates: null, reason: response.data.reason || 'Unknown error' };
   } catch (error) {
     return { success: false, coordinates: null, reason: error.message };
   }

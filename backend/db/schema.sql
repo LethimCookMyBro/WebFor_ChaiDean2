@@ -96,3 +96,62 @@ CREATE INDEX IF NOT EXISTS idx_crowd_reports_type ON crowd_reports(report_type);
 CREATE INDEX IF NOT EXISTS idx_crowd_reports_created ON crowd_reports(created_at);
 CREATE INDEX IF NOT EXISTS idx_family_members_group ON family_members(group_id);
 CREATE INDEX IF NOT EXISTS idx_family_members_user ON family_members(user_id);
+
+-- ============================================
+-- SECURITY TABLES
+-- ============================================
+
+-- Token blacklist for revoked tokens
+CREATE TABLE IF NOT EXISTS token_blacklist (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  token_hash TEXT NOT NULL UNIQUE,
+  user_id TEXT,
+  revoked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  expires_at DATETIME NOT NULL
+);
+
+-- Audit logs for security events
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_type TEXT NOT NULL,
+  user_id TEXT,
+  action TEXT NOT NULL,
+  resource TEXT,
+  ip TEXT,
+  user_agent TEXT,
+  request_id TEXT,
+  metadata TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Login attempts for brute force tracking
+CREATE TABLE IF NOT EXISTS login_attempts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  identifier TEXT NOT NULL,
+  ip TEXT NOT NULL,
+  success INTEGER DEFAULT 0,
+  attempted_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Password history for preventing reuse
+CREATE TABLE IF NOT EXISTS password_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- ============================================
+-- SECURITY INDEXES
+-- ============================================
+
+CREATE INDEX IF NOT EXISTS idx_token_blacklist_hash ON token_blacklist(token_hash);
+CREATE INDEX IF NOT EXISTS idx_token_blacklist_expires ON token_blacklist(expires_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_event ON audit_logs(event_type, created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_request ON audit_logs(request_id);
+CREATE INDEX IF NOT EXISTS idx_login_attempts_identifier ON login_attempts(identifier, attempted_at);
+CREATE INDEX IF NOT EXISTS idx_login_attempts_ip ON login_attempts(ip, attempted_at);
+CREATE INDEX IF NOT EXISTS idx_password_history_user ON password_history(user_id);
+

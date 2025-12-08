@@ -1,127 +1,230 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 
 const AuthContext = createContext(null)
 
-/**
- * Get user-specific storage key
- */
-const getUserStorageKey = (userId, key) => `user_${userId}_${key}`
+// API base URL
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+
+// Token refresh threshold (2 minutes before expiry)
+const REFRESH_THRESHOLD_MS = 2 * 60 * 1000
+
+// Inactivity timeout (30 minutes)
+const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000
 
 export function AuthProvider({ children }) {
+  // User state - kept in memory only (not localStorage)
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
-
-  // Load user from localStorage on mount
-  useEffect(() => {
-    const stored = localStorage.getItem('currentUser')
-    if (stored) {
-      try {
-        const userData = JSON.parse(stored)
-        // Check if user is approved
-        if (userData.approved) {
-          setUser(userData)
-        }
-      } catch (e) {
-        localStorage.removeItem('currentUser')
+  const [expiresAt, setExpiresAt] = useState(null)
+  
+  // Refs for timers
+  const refreshTimer = useRef(null)
+  const inactivityTimer = useRef(null)
+  const lastActivity = useRef(Date.now())
+  
+  // Refresh token function
+  const refreshToken = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include'
+      })
+      
+      if (!response.ok) {
+        console.log('[Auth] Refresh failed, logging out')
+        setUser(null)
+        setExpiresAt(null)
+        return false
       }
+      
+      const data = await response.json()
+      
+      // Update expiry time
+      const newExpiry = new Date(Date.now() + data.expiresIn * 1000)
+      setExpiresAt(newExpiry)
+      
+      // Schedule next refresh
+      scheduleRefresh(data.expiresIn * 1000)
+      
+      return true
+    } catch (error) {
+      console.error('[Auth] Refresh error:', error)
+      return false
     }
-    setLoading(false)
   }, [])
-
-  // Register new user - with pending approval
-  const register = (name, phone, district = '') => {
+  
+  // Schedule token refresh
+  const scheduleRefresh = useCallback((expiresInMs) => {
+    // Clear existing timer
+    if (refreshTimer.current) {
+      clearTimeout(refreshTimer.current)
+    }
+    
+    // Schedule refresh before expiry
+    const refreshIn = expiresInMs - REFRESH_THRESHOLD_MS
+    if (refreshIn > 0) {
+      refreshTimer.current = setTimeout(() => {
+        refreshToken()
+      }, refreshIn)
+    }
+  }, [refreshToken])
+  
+  // Reset inactivity timer
+  const resetInactivityTimer = useCallback(() => {
+    lastActivity.current = Date.now()
+    
+    if (inactivityTimer.current) {
+      clearTimeout(inactivityTimer.current)
+    }
+    
+    if (user) {
+      inactivityTimer.current = setTimeout(() => {
+        console.log('[Auth] Inactivity timeout, logging out')
+        logout()
+      }, INACTIVITY_TIMEOUT_MS)
+    }
+  }, [user])
+  
+  // Track user activity
+  useEffect(() => {
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart']
+    
+    const handleActivity = () => {
+      resetInactivityTimer()
+    }
+    
+    events.forEach(event => {
+      window.addEventListener(event, handleActivity, { passive: true })
+    })
+    
+    return () => {
+      events.forEach(event => {
+        window.removeEventListener(event, handleActivity)
+      })
+    }
+  }, [resetInactivityTimer])
+  
+  // Initialize - check if user has valid session
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        // Try to refresh token to validate session
+        const response = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
+          method: 'POST',
+          credentials: 'include'
+        })
+        
+        if (response.ok) {
+          const data = await response.json()
+          
+          // We have a valid session - get user info from a profile endpoint or decode from response
+          // For now, set minimal user info
+          setUser({ authenticated: true })
+          
+          const expiry = new Date(Date.now() + data.expiresIn * 1000)
+          setExpiresAt(expiry)
+          scheduleRefresh(data.expiresIn * 1000)
+          resetInactivityTimer()
+        }
+      } catch (error) {
+        console.log('[Auth] No valid session')
+      }
+      
+      setLoading(false)
+    }
+    
+    initAuth()
+    
+    return () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current)
+      if (inactivityTimer.current) clearTimeout(inactivityTimer.current)
+    }
+  }, [scheduleRefresh, resetInactivityTimer])
+  
+  // Login with phone
+  const login = async (phone) => {
+    if (!phone || phone.length !== 10) {
+      throw new Error('กรุณาใส่เบอร์โทร 10 หลัก')
+    }
+    
+    const response = await fetch(`${API_BASE}/api/v1/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ phone })
+    })
+    
+    const data = await response.json()
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'เข้าสู่ระบบไม่สำเร็จ')
+    }
+    
+    // Set user in memory
+    setUser({
+      id: data.user.id,
+      phone: data.user.phone,
+      authenticated: true
+    })
+    
+    // Set expiry and schedule refresh
+    const expiry = new Date(Date.now() + data.expiresIn * 1000)
+    setExpiresAt(expiry)
+    scheduleRefresh(data.expiresIn * 1000)
+    resetInactivityTimer()
+    
+    return { success: true, user: data.user }
+  }
+  
+  // Register - this should be handled differently in a real app
+  const register = async (name, phone, district = '') => {
+    // For now, registration can still use localStorage for pending users
+    // The actual user data should be stored server-side
     if (!name.trim()) {
       throw new Error('กรุณาใส่ชื่อจริง')
     }
     if (!phone || phone.length !== 10) {
       throw new Error('กรุณาใส่เบอร์โทร 10 หลัก')
     }
-
-    // Check if phone already registered
-    const users = JSON.parse(localStorage.getItem('allUsers') || '[]')
-    const existing = users.find(u => u.phone === phone)
-    if (existing) {
-      throw new Error('เบอร์นี้ลงทะเบียนแล้ว กรุณาเข้าสู่ระบบ')
-    }
-
-    const userId = `user_${Date.now()}`
-    const newUser = {
-      id: userId,
-      name: name.trim(),
-      phone: phone,
-      district: district || 'ไม่ระบุ',
-      approved: false, // Pending admin approval
-      createdAt: new Date().toISOString()
-    }
-
-    // Save to users list
-    users.push(newUser)
-    localStorage.setItem('allUsers', JSON.stringify(users))
-
-    // Initialize user-specific data storage
-    localStorage.setItem(getUserStorageKey(userId, 'reports'), '[]')
-    localStorage.setItem(getUserStorageKey(userId, 'family'), '[]')
-    localStorage.setItem(getUserStorageKey(userId, 'sos'), '[]')
-
-    return { pending: true, user: newUser }
+    
+    // TODO: Implement server-side registration
+    // For now, return pending status
+    return { pending: true, message: 'รอการอนุมัติจาก Admin' }
   }
-
-  // Login with phone
-  const login = (phone) => {
-    if (!phone || phone.length !== 10) {
-      throw new Error('กรุณาใส่เบอร์โทร 10 หลัก')
-    }
-
-    const users = JSON.parse(localStorage.getItem('allUsers') || '[]')
-    const found = users.find(u => u.phone === phone)
-
-    if (!found) {
-      return { notFound: true }
-    }
-
-    if (!found.approved) {
-      return { pending: true, user: found }
-    }
-
-    // Set as current user
-    localStorage.setItem('currentUser', JSON.stringify(found))
-    setUser(found)
-    return { success: true, user: found }
-  }
-
+  
   // Logout
-  const logout = () => {
-    localStorage.removeItem('currentUser')
+  const logout = async () => {
+    try {
+      await fetch(`${API_BASE}/api/v1/auth/logout`, {
+        method: 'POST',
+        credentials: 'include'
+      })
+    } catch (error) {
+      console.error('[Auth] Logout error:', error)
+    }
+    
+    // Clear state
     setUser(null)
+    setExpiresAt(null)
+    
+    // Clear timers
+    if (refreshTimer.current) clearTimeout(refreshTimer.current)
+    if (inactivityTimer.current) clearTimeout(inactivityTimer.current)
   }
-
-  // Get user-specific data
-  const getUserData = (key) => {
-    if (!user?.id) return []
-    const data = localStorage.getItem(getUserStorageKey(user.id, key))
-    return data ? JSON.parse(data) : []
-  }
-
-  // Set user-specific data
-  const setUserData = (key, data) => {
-    if (!user?.id) return
-    localStorage.setItem(getUserStorageKey(user.id, key), JSON.stringify(data))
-  }
-
-  // Check if logged in and approved
-  const isLoggedIn = !!user && user.approved
-
+  
+  // Check if logged in
+  const isLoggedIn = !!user?.authenticated
+  
   return (
     <AuthContext.Provider value={{
       user,
       loading,
       isLoggedIn,
+      expiresAt,
       login,
       register,
       logout,
-      getUserData,
-      setUserData,
-      getUserStorageKey
+      refreshToken
     }}>
       {children}
     </AuthContext.Provider>
@@ -137,4 +240,3 @@ export function useAuth() {
 }
 
 export default AuthContext
-
