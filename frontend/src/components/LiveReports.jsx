@@ -23,7 +23,7 @@ export default function LiveReports({ userLocation = null }) {
       const now = new Date()
       const filtered = userReports.filter(r => {
         const reportTime = new Date(r.time)
-        return (now - reportTime) < 24 * 60 * 60 * 1000
+        return (now - reportTime) < 24 * 60 * 60 * 1000 && r.verified === true
       }).slice(0, 20) // Limit to 20 most recent
       
       setReports(filtered)

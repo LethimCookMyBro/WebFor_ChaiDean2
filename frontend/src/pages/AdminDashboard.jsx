@@ -184,7 +184,7 @@ export default function AdminDashboard() {
       setLogs(updated)
       setSelectedLogs([])
       localStorage.setItem('systemLogs', JSON.stringify(updated))
-      addSystemLog(`Deleted ${selectedLogs.length} logs`)
+      // Removed log creation to prevent loop
   }
 
   const handleBulkDeleteLogs = () => {
@@ -197,7 +197,7 @@ export default function AdminDashboard() {
       const updated = logs.slice(count)
       setLogs(updated)
       localStorage.setItem('systemLogs', JSON.stringify(updated))
-      addSystemLog(`Bulk deleted ${count} logs`)
+      // Removed log creation to prevent loop
   }
 
   const toggleLogSelection = (logId) => {
