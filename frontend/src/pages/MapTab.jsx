@@ -1,257 +1,274 @@
-import { useState, useEffect } from 'react'
-import { MapContainer, TileLayer, Circle, Marker, Popup, Polyline, useMap } from 'react-leaflet'
-import { Navigation, Map as MapIcon } from 'lucide-react'
-import L from 'leaflet'
+import { useState, useMemo } from 'react'
+import { MapPin, Search, Navigation, AlertTriangle, Shield, Target } from 'lucide-react'
+import * as turf from '@turf/turf'
 
-// Fix Leaflet icons
-delete L.Icon.Default.prototype._getIconUrl
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-})
+// =============================================
+// จุดอ้างอิง: ด่านหาดเล็ก (ด่านถาวรไทย-กัมพูชา)
+// =============================================
+const HAT_LEK_BORDER = { lat: 11.7010, lng: 102.8890, name: 'ด่านหาดเล็ก' }
 
-// เส้นชายแดนตราด–กัมพูชา (อ้างอิงแนวเขาพนมดงรัก–คลองใหญ่–ไม้รูด)
-const BORDER_LINE = [
-  [11.6625, 102.9110], // หาดเล็ก
-  [11.7205, 102.8925], // คลองใหญ่ใต้
-  [11.8050, 102.8650], // ไม้รูด
-  [11.9150, 102.8400], // ชายแดนบ่อไร่
-  [12.0600, 102.8250], // เขาสมิงตะวันออก
-  [12.1700, 102.8200], // เชื่อมจุดเหนือ
+// ข้อมูลอำเภอ/ตำบลใน จ.ตราด พร้อมพิกัด
+const TRAT_LOCATIONS = [
+  // อ.เมืองตราด
+  { district: 'เมืองตราด', subdistrict: 'บางพระ', lat: 12.2431, lng: 102.5151 },
+  { district: 'เมืองตราด', subdistrict: 'หนองเสม็ด', lat: 12.2300, lng: 102.4900 },
+  { district: 'เมืองตราด', subdistrict: 'หนองโสน', lat: 12.2100, lng: 102.5300 },
+  { district: 'เมืองตราด', subdistrict: 'หนองคันทรง', lat: 12.1900, lng: 102.4700 },
+  { district: 'เมืองตราด', subdistrict: 'ห้วงน้ำขาว', lat: 12.2600, lng: 102.5500 },
+  { district: 'เมืองตราด', subdistrict: 'อ่าวใหญ่', lat: 12.1700, lng: 102.5100 },
+  { district: 'เมืองตราด', subdistrict: 'วังกระแจะ', lat: 12.2800, lng: 102.5000 },
+  { district: 'เมืองตราด', subdistrict: 'ห้วยแร้ง', lat: 12.3000, lng: 102.5200 },
+  { district: 'เมืองตราด', subdistrict: 'เนินทราย', lat: 12.2200, lng: 102.5400 },
+  { district: 'เมืองตราด', subdistrict: 'ท่าพริก', lat: 12.1500, lng: 102.5300 },
+  { district: 'เมืองตราด', subdistrict: 'ท่ากุ่ม', lat: 12.1300, lng: 102.5500 },
+  { district: 'เมืองตราด', subdistrict: 'ตะกาง', lat: 12.2000, lng: 102.4500 },
+  { district: 'เมืองตราด', subdistrict: 'ชำราก', lat: 12.1600, lng: 102.5800 },
+  { district: 'เมืองตราด', subdistrict: 'แหลมกลัด', lat: 12.1200, lng: 102.6000 },
+  
+  // อ.คลองใหญ่
+  { district: 'คลองใหญ่', subdistrict: 'คลองใหญ่', lat: 11.7700, lng: 102.8800 },
+  { district: 'คลองใหญ่', subdistrict: 'ไม้รูด', lat: 11.8200, lng: 102.8500 },
+  { district: 'คลองใหญ่', subdistrict: 'หาดเล็ก', lat: 11.7010, lng: 102.8890 },
+  
+  // อ.เขาสมิง
+  { district: 'เขาสมิง', subdistrict: 'เขาสมิง', lat: 12.0500, lng: 102.7000 },
+  { district: 'เขาสมิง', subdistrict: 'แสนตุ้ง', lat: 12.1000, lng: 102.7200 },
+  { district: 'เขาสมิง', subdistrict: 'วังตะเคียน', lat: 12.0800, lng: 102.6800 },
+  { district: 'เขาสมิง', subdistrict: 'ท่าโสม', lat: 12.0300, lng: 102.7300 },
+  { district: 'เขาสมิง', subdistrict: 'สะตอ', lat: 12.0600, lng: 102.7500 },
+  { district: 'เขาสมิง', subdistrict: 'ประณีต', lat: 12.0200, lng: 102.6900 },
+  { district: 'เขาสมิง', subdistrict: 'เทพนิมิต', lat: 12.0900, lng: 102.7100 },
+  
+  // อ.บ่อไร่
+  { district: 'บ่อไร่', subdistrict: 'บ่อพลอย', lat: 12.2000, lng: 102.7800 },
+  { district: 'บ่อไร่', subdistrict: 'ช้างทูน', lat: 12.2500, lng: 102.8000 },
+  { district: 'บ่อไร่', subdistrict: 'ด่านชุมพล', lat: 12.3000, lng: 102.8200 },
+  { district: 'บ่อไร่', subdistrict: 'หนองบอน', lat: 12.2200, lng: 102.7600 },
+  { district: 'บ่อไร่', subdistrict: 'นนทรีย์', lat: 12.1800, lng: 102.8100 },
+  
+  // อ.แหลมงอบ
+  { district: 'แหลมงอบ', subdistrict: 'แหลมงอบ', lat: 12.1800, lng: 102.4200 },
+  { district: 'แหลมงอบ', subdistrict: 'น้ำเชี่ยว', lat: 12.2000, lng: 102.4000 },
+  { district: 'แหลมงอบ', subdistrict: 'คลองใหญ่', lat: 12.1500, lng: 102.4500 },
+  { district: 'แหลมงอบ', subdistrict: 'บางปิด', lat: 12.1700, lng: 102.3800 },
+  
+  // อ.เกาะกูด
+  { district: 'เกาะกูด', subdistrict: 'เกาะกูด', lat: 11.6600, lng: 102.5700 },
+  { district: 'เกาะกูด', subdistrict: 'เกาะหมาก', lat: 11.8200, lng: 102.4800 },
+  
+  // อ.เกาะช้าง
+  { district: 'เกาะช้าง', subdistrict: 'เกาะช้าง', lat: 12.0500, lng: 102.3500 },
+  { district: 'เกาะช้าง', subdistrict: 'เกาะช้างใต้', lat: 11.9800, lng: 102.3300 },
 ]
 
-// เขตอันตราย - 5 ระดับ (พิกัดและรัศมีปรับตามภูมิประเทศจริง)
-const DANGER_ZONES = [
-  // 0–5 km จากชายแดน
-  { 
-    center: [11.6740, 102.9050], 
-    radius: 4500, 
-    level: "critical", 
-    name: "ด่านหาดเล็ก (0–5 กม.)" 
-  },
-  // 5–10 km
-  { 
-    center: [11.7205, 102.8925], 
-    radius: 9000, 
-    level: "critical", 
-    name: "คลองใหญ่–ชายแดนใต้ (5–10 กม.)" 
-  },
-  // 10–20 km
-  { 
-    center: [11.8200, 102.8550], 
-    radius: 18000, 
-    level: "high", 
-    name: "ไม้รูด (10–20 กม.)" 
-  },
-  // 15–25 km
-  { 
-    center: [12.0100, 102.8350], 
-    radius: 22000, 
-    level: "high", 
-    name: "บ่อไร่ (15–25 กม.)" 
-  },
-  // 25–45 km (พื้นที่ตัดกลางจังหวัด)
-  { 
-    center: [12.1300, 102.7500], 
-    radius: 35000, 
-    level: "moderate", 
-    name: "เขาสมิง–กลางจังหวัด (25–45 กม.)" 
-  },
-  // 45–70 km (อ.เมืองตราด)
-  { 
-    center: [12.2500, 102.5177], 
-    radius: 50000, 
-    level: "low", 
-    name: "เมืองตราด (45–70 กม.)" 
-  },
-  // ปลอดภัย – เกาะช้าง
-  { 
-    center: [12.0500, 102.3500], 
-    radius: 30000, 
-    level: "safe", 
-    name: "เกาะช้าง (ปลอดภัย)" 
-  },
+// ระยะอาวุธ
+const WEAPON_RANGES = [
+  { name: 'ปืนใหญ่ภาคพื้น', range: 15, icon: '💣' },
+  { name: 'BM-21 Grad', range: 40, icon: '🚀' },
+  { name: 'Type 90B MLRS', range: 40, icon: '🚀' },
+  { name: 'PHL-03', range: 150, icon: '🎯' },
 ]
 
-const RISK_COLORS = {
-  critical: '#dc2626',
-  high: '#ea580c',
-  moderate: '#f59e0b',
-  low: '#84cc16',
-  safe: '#22c55e'
+// คำนวณระยะห่าง (Haversine)
+function calculateDistance(lat1, lng1, lat2, lng2) {
+  const from = turf.point([lng1, lat1])
+  const to = turf.point([lng2, lat2])
+  return turf.distance(from, to, { units: 'kilometers' })
 }
 
-const TRAT_CENTER = [12.0500, 102.6000]
-
-// Zone filter levels
-const ZONE_LEVELS = [
-  { id: 'critical', name: 'อันตรายสูงสุด (0-10 กม.)', color: '#dc2626' },
-  { id: 'high', name: 'อันตรายสูง (10-20 กม.)', color: '#ea580c' },
-  { id: 'moderate', name: 'เสี่ยงปานกลาง (20-50 กม.)', color: '#f59e0b' },
-  { id: 'low', name: 'เสี่ยงต่ำ (50-90 กม.)', color: '#84cc16' },
-  { id: 'safe', name: 'ปลอดภัย (90+ กม.)', color: '#22c55e' },
-]
-
-// User marker - always blue
-function UserMarker({ position }) {
-  const color = '#3b82f6' // Fixed blue color
-  const map = useMap()
-  useEffect(() => {
-    if (position) map.flyTo(position, 11, { duration: 1 })
-  }, [position, map])
-  
-  if (!position) return null
-  
-  return (
-    <Marker 
-      position={position}
-      icon={L.divIcon({
-        html: `<div style="background-color: ${color}; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.5);"></div>`,
-        iconSize: [20, 20],
-        iconAnchor: [10, 10]
-      })}
-    >
-      <Popup><strong>ตำแหน่งของคุณ</strong></Popup>
-    </Marker>
-  )
+// ประเมินความเสี่ยง
+function getRiskLevel(distanceKm) {
+  if (distanceKm <= 15) return { level: 'วิกฤต', color: '#dc2626', emoji: '🔴', desc: 'อยู่ในระยะปืนใหญ่' }
+  if (distanceKm <= 40) return { level: 'อันตรายสูง', color: '#ea580c', emoji: '🟠', desc: 'เสี่ยงจรวด BM-21/Type90B' }
+  if (distanceKm <= 70) return { level: 'เฝ้าระวัง', color: '#eab308', emoji: '🟡', desc: 'อาจอยู่ในระยะ MLRS รุ่นใหม่' }
+  if (distanceKm <= 150) return { level: 'เสี่ยงต่ำ', color: '#22c55e', emoji: '🟢', desc: 'อยู่ในระยะ PHL-03' }
+  return { level: 'ปลอดภัย', color: '#3b82f6', emoji: '✅', desc: 'อยู่นอกระยะอาวุธทุกชนิด' }
 }
 
 export default function MapTab() {
-  const [userPosition, setUserPosition] = useState(null)
-  const [showBorder, setShowBorder] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedLocation, setSelectedLocation] = useState(null)
+  const [distance, setDistance] = useState(null)
   const [loading, setLoading] = useState(false)
-  // Individual zone visibility controls
-  const [visibleZones, setVisibleZones] = useState({
-    critical: true,
-    high: true,
-    moderate: true,
-    low: true,
-    safe: true
-  })
+  const [error, setError] = useState(null)
 
-  const toggleZone = (zoneId) => {
-    setVisibleZones(prev => ({ ...prev, [zoneId]: !prev[zoneId] }))
+  // ค้นหาตำบล
+  const filteredLocations = useMemo(() => {
+    if (!searchQuery.trim()) return []
+    const q = searchQuery.toLowerCase()
+    return TRAT_LOCATIONS.filter(loc => 
+      loc.subdistrict.toLowerCase().includes(q) || 
+      loc.district.toLowerCase().includes(q)
+    ).slice(0, 8)
+  }, [searchQuery])
+
+  // เลือกตำบลจากรายการ
+  const handleSelectLocation = (loc) => {
+    setSelectedLocation(loc)
+    setSearchQuery(`${loc.subdistrict} อ.${loc.district}`)
+    const dist = calculateDistance(loc.lat, loc.lng, HAT_LEK_BORDER.lat, HAT_LEK_BORDER.lng)
+    setDistance(dist)
+    setError(null)
   }
-  
-  const getUserLocation = () => {
+
+  // ใช้ GPS
+  const handleGetGPS = () => {
     setLoading(true)
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setUserPosition([pos.coords.latitude, pos.coords.longitude])
-          setLoading(false)
-        },
-        () => {
-          setLoading(false)
-          alert('ไม่สามารถเข้าถึงตำแหน่งได้')
-        },
-        { enableHighAccuracy: true }
-      )
+    setError(null)
+    if (!navigator.geolocation) {
+      setError('เบราว์เซอร์ไม่รองรับ GPS')
+      setLoading(false)
+      return
     }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords
+        const dist = calculateDistance(latitude, longitude, HAT_LEK_BORDER.lat, HAT_LEK_BORDER.lng)
+        setSelectedLocation({ subdistrict: 'ตำแหน่งปัจจุบัน', district: 'GPS', lat: latitude, lng: longitude })
+        setDistance(dist)
+        setSearchQuery('')
+        setLoading(false)
+      },
+      () => {
+        setError('ไม่สามารถเข้าถึงตำแหน่งได้')
+        setLoading(false)
+      }
+    )
   }
+
+  const risk = distance !== null ? getRiskLevel(distance) : null
 
   return (
-    <div className="space-y-4">
-      {/* Map */}
-      <div className="bg-slate-800 rounded-2xl overflow-hidden relative" style={{ height: '400px' }}>
-        <MapContainer center={TRAT_CENTER} zoom={9} style={{ height: '100%', width: '100%' }} zoomControl={false}>
-          <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          
-          {/* Risk Zones */}
-          {DANGER_ZONES.filter(zone => visibleZones[zone.level]).map((zone, i) => (
-            <Circle
-              key={i}
-              center={zone.center}
-              radius={zone.radius}
-              pathOptions={{
-                color: RISK_COLORS[zone.level],
-                fillColor: RISK_COLORS[zone.level],
-                fillOpacity: 0.25,
-                weight: 2
-              }}
-            >
-              <Popup>
-                <strong>{zone.name}</strong><br />
-                <span style={{ color: RISK_COLORS[zone.level] }}>
-                  {zone.level === 'critical' ? 'อันตรายสูงสุด' : 
-                   zone.level === 'high' ? 'อันตรายสูง' :
-                   zone.level === 'moderate' ? 'เสี่ยงปานกลาง' : 
-                   zone.level === 'low' ? 'เสี่ยงต่ำ' : 'ปลอดภัย'}
-                </span>
-              </Popup>
-            </Circle>
-          ))}
-          
-          {/* Border */}
-          {showBorder && (
-            <Polyline positions={BORDER_LINE} pathOptions={{ color: '#dc2626', weight: 3, dashArray: '10, 5' }} />
-          )}
-          
-          <UserMarker position={userPosition} />
-        </MapContainer>
-        
-        <button
-          onClick={getUserLocation}
-          disabled={loading}
-          className="absolute top-4 left-4 z-[1000] bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 hover:bg-blue-600"
-        >
-          <Navigation className="w-4 h-4" />
-          {loading ? 'กำลังค้นหา...' : 'ตำแหน่งของฉัน'}
-        </button>
+    <div className="max-w-lg mx-auto space-y-4">
+      {/* Header */}
+      <div className="text-center py-4">
+        <h1 className="text-2xl font-bold text-slate-800">🛡️ เช็คระยะปลอดภัย</h1>
+        <p className="text-sm text-slate-500">จากชายแดนไทย-กัมพูชา (ด่านหาดเล็ก)</p>
       </div>
 
-      {/* Controls - Zone Selection */}
-      <div className="bg-white rounded-xl p-4 border border-slate-200">
-        <h3 className="font-bold mb-3 flex items-center gap-2">
-          <MapIcon className="w-5 h-5" />
-          ควบคุมชั้นข้อมูล
-        </h3>
-        
-        {/* Individual Zone Toggles */}
-        <p className="text-sm text-slate-500 mb-2">🔴 เขตอันตราย (เลือกแสดง/ซ่อนแต่ละระดับ)</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
-          {ZONE_LEVELS.map((zone) => (
-            <label key={zone.id} className="flex items-center gap-2 cursor-pointer text-sm p-2 rounded-lg hover:bg-slate-50 transition-colors">
-              <input 
-                type="checkbox" 
-                checked={visibleZones[zone.id]} 
-                onChange={() => toggleZone(zone.id)} 
-                className="w-4 h-4 rounded" 
-              />
-              <div 
-                className="w-4 h-4 rounded-full border border-white shadow"
-                style={{ backgroundColor: zone.color }}
-              />
-              <span>{zone.name}</span>
-            </label>
-          ))}
-        </div>
-        
-        {/* Border Toggle */}
-        <div className="border-t pt-3">
-          <label className="flex items-center gap-2 cursor-pointer text-sm">
-            <input type="checkbox" checked={showBorder} onChange={(e) => setShowBorder(e.target.checked)} className="w-4 h-4 rounded" />
-            🚧 เส้นชายแดน
-          </label>
-        </div>
+      {/* GPS Button */}
+      <button
+        onClick={handleGetGPS}
+        disabled={loading}
+        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg transition-all"
+      >
+        <Navigation className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+        {loading ? 'กำลังค้นหา...' : '📍 เช็คตำแหน่งของฉัน (GPS)'}
+      </button>
+
+      {/* Divider */}
+      <div className="flex items-center gap-3">
+        <div className="flex-1 h-px bg-slate-200"></div>
+        <span className="text-sm text-slate-400">หรือค้นหาด้วยชื่อ</span>
+        <div className="flex-1 h-px bg-slate-200"></div>
       </div>
-      
-      {/* Legend */}
-      <div className="bg-white rounded-xl p-4 border border-slate-200">
-        <h3 className="font-bold mb-3">คำอธิบายสัญลักษณ์</h3>
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          {ZONE_LEVELS.map((zone) => (
-            <div key={zone.id} className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full" style={{ backgroundColor: zone.color }} />
-              <span>{zone.name}</span>
-            </div>
-          ))}
-          <div className="flex items-center gap-2 col-span-2 border-t pt-2 mt-1">
-            <div className="w-4 h-4 rounded-full bg-blue-500" />
-            <span>ตำแหน่งของคุณ</span>
+
+      {/* Search Box */}
+      <div className="relative">
+        <div className="flex gap-2">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="พิมพ์ชื่อตำบล เช่น ชำราก, คลองใหญ่"
+              className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
         </div>
+
+        {/* Search Results */}
+        {filteredLocations.length > 0 && (
+          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-10 max-h-60 overflow-y-auto">
+            {filteredLocations.map((loc, i) => (
+              <button
+                key={i}
+                onClick={() => handleSelectLocation(loc)}
+                className="w-full px-4 py-3 text-left hover:bg-slate-50 border-b border-slate-100 last:border-b-0 flex items-center gap-2"
+              >
+                <MapPin className="w-4 h-4 text-slate-400" />
+                <span className="font-medium">{loc.subdistrict}</span>
+                <span className="text-sm text-slate-400">อ.{loc.district}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-red-700 text-sm">
+          ❌ {error}
+        </div>
+      )}
+
+      {/* Result */}
+      {distance !== null && risk && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden">
+          {/* Result Header */}
+          <div className="p-4 text-center border-b border-slate-100">
+            <h2 className="text-lg font-bold text-slate-700">ผลการวิเคราะห์</h2>
+          </div>
+
+          {/* Location */}
+          <div className="p-4 bg-slate-50">
+            <div className="flex items-center gap-2 text-sm text-slate-600">
+              <MapPin className="w-4 h-4" />
+              <span><strong>ตำแหน่ง:</strong> {selectedLocation?.subdistrict} {selectedLocation?.district !== 'GPS' ? `อ.${selectedLocation?.district}` : ''}</span>
+            </div>
+          </div>
+
+          {/* Distance */}
+          <div className="p-6 text-center">
+            <div className="text-sm text-slate-500 mb-1">📏 ระยะห่างจาก{HAT_LEK_BORDER.name}</div>
+            <div className="text-5xl font-bold text-slate-800">{distance.toFixed(2)} <span className="text-2xl">กม.</span></div>
+          </div>
+
+          {/* Risk Level */}
+          <div 
+            className="p-6 text-center text-white"
+            style={{ backgroundColor: risk.color }}
+          >
+            <div className="text-4xl mb-2">{risk.emoji}</div>
+            <div className="text-2xl font-bold">{risk.level}</div>
+            <div className="text-sm opacity-90 mt-1">{risk.desc}</div>
+          </div>
+
+          {/* Weapon Assessment */}
+          <div className="p-4">
+            <h3 className="font-bold text-sm text-slate-600 mb-3 flex items-center gap-2">
+              <Target className="w-4 h-4" /> การประเมินจากระยะอาวุธ
+            </h3>
+            <div className="space-y-2">
+              {WEAPON_RANGES.map((weapon, i) => {
+                const inRange = distance <= weapon.range
+                return (
+                  <div key={i} className={`flex items-center justify-between p-2 rounded-lg ${inRange ? 'bg-red-50' : 'bg-green-50'}`}>
+                    <div className="flex items-center gap-2">
+                      <span>{weapon.icon}</span>
+                      <span className="text-sm font-medium">{weapon.name}</span>
+                      <span className="text-xs text-slate-400">({weapon.range} กม.)</span>
+                    </div>
+                    <span className={`text-xs font-bold px-2 py-1 rounded ${inRange ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                      {inRange ? '⚠️ อยู่ในระยะ' : '✅ ปลอดภัย'}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Disclaimer */}
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">
+        <p className="text-sm text-amber-800">
+          ⚠️ <strong>การจำลองเท่านั้น</strong> — ไม่ควรเชื่อถือ 100%
+        </p>
+        <p className="text-xs text-amber-600 mt-1">
+          ติดตามข่าวสารจากหน่วยงานราชการ
+        </p>
       </div>
     </div>
   )
