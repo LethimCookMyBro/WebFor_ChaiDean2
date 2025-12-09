@@ -76,7 +76,7 @@
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/LethimCookMyBro/WebFor_ChaiDean.git
 cd KuyHunsen
 
 # Install all dependencies
