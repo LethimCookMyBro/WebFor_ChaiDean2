@@ -3,7 +3,7 @@ import ThreatBanner from '../components/ThreatBanner'
 import QuickActions from '../components/QuickActions'
 import LiveReports from '../components/LiveReports'
 import ReportForm from '../components/ReportForm'
-
+import { Lock } from 'lucide-react'
 
 /**
  * HomeTab Page
@@ -11,7 +11,12 @@ import ReportForm from '../components/ReportForm'
  */
 export default function HomeTab({ 
   threatLevel = 'YELLOW',
-  onCheckClick
+  onSOSClick, 
+  onCheckClick,
+  isLoggedIn = false,
+  onLoginRequired,
+  userId,
+  userName
 }) {
   const [adminReports, setAdminReports] = useState([])
 
@@ -38,6 +43,7 @@ export default function HomeTab({
 
       {/* Quick Actions */}
       <QuickActions 
+        onSOSClick={isLoggedIn ? onSOSClick : onLoginRequired}
         onCheckClick={onCheckClick}
       />
 
@@ -61,8 +67,19 @@ export default function HomeTab({
       {/* Live Reports (visible to all) */}
       <LiveReports />
 
-      {/* Report Form (Anonymous) */}
-      <ReportForm />
+      {/* Protected: Report Form */}
+      {isLoggedIn ? (
+        <ReportForm userId={userId} userName={userName} />
+      ) : (
+        <div className="bg-slate-100 rounded-2xl p-6 border-2 border-dashed border-slate-300 text-center">
+          <Lock className="w-8 h-8 mx-auto text-slate-400 mb-2" />
+          <p className="font-medium text-slate-600">แจ้งเหตุการณ์</p>
+          <p className="text-sm text-slate-400 mb-3">ต้องล็อกอินก่อนใช้งาน</p>
+          <a href="/login" className="inline-block px-4 py-2 bg-blue-500 text-white rounded-xl text-sm">
+            ล็อกอิน
+          </a>
+        </div>
+      )}
     </div>
   )
 }

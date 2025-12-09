@@ -1,0 +1,84 @@
+{
+  "subdistricts": [
+    {
+      "name_th": "ตำบลคลองลึก",
+      "name_en": "Khlong Luek",
+      "amphoe": "อรัญประเทศ",
+      "province": "Sa Kaeo",
+      "lat": 13.7165,
+      "lon": 102.5618
+    },
+    {
+      "name_th": "ตำบลบ้านด่าน",
+      "name_en": "Ban Dan",
+      "amphoe": "บ้านกรวด",
+      "province": "Buriram",
+      "lat": 14.2833,
+      "lon": 103.1167
+    },
+    {
+      "name_th": "ตำบลช่องจอม",
+      "name_en": "Chong Chom",
+      "amphoe": "กาบเชิง",
+      "province": "Surin",
+      "lat": 14.2333,
+      "lon": 103.5833
+    },
+    {
+      "name_th": "ตำบลเขาพระวิหาร",
+      "name_en": "Khao Phra Wihan",
+      "amphoe": "กันทรลักษ์",
+      "province": "Sisaket",
+      "lat": 14.3833,
+      "lon": 104.6833
+    },
+    {
+      "name_th": "ตำบลช่องเม็ก",
+      "name_en": "Chong Mek",
+      "amphoe": "สิรินธร",
+      "province": "Ubon Ratchathani",
+      "lat": 15.1333,
+      "lon": 105.4667
+    },
+    {
+      "name_th": "ตำบลคลองใหญ่",
+      "name_en": "Khlong Yai",
+      "amphoe": "คลองใหญ่",
+      "province": "Trat",
+      "lat": 11.7667,
+      "lon": 102.8833
+    },
+    {
+      "name_th": "ตำบลบ้านแหลม",
+      "name_en": "Ban Laem",
+      "amphoe": "โป่งน้ำร้อน",
+      "province": "Chanthaburi",
+      "lat": 13.0333,
+      "lon": 102.4167
+    },
+    {
+      "name_th": "ตำบลตาพระยา",
+      "name_en": "Ta Phraya",
+      "amphoe": "ตาพระยา",
+      "province": "Sa Kaeo",
+      "lat": 14.0167,
+      "lon": 102.5833
+    },
+    {
+      "name_th": "ตำบลละหานทราย",
+      "name_en": "Lahan Sai",
+      "amphoe": "ละหานทราย",
+      "province": "Buriram",
+      "lat": 14.3500,
+      "lon": 102.8333
+    },
+    {
+      "name_th": "ตำบลบักดอง",
+      "name_en": "Bak Dong",
+      "amphoe": "ขุนหาญ",
+      "province": "Sisaket",
+      "lat": 14.5167,
+      "lon": 104.5500
+    }
+  ]
+}

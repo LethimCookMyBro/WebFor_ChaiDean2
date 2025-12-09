@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Send, MapPin, Navigation, AlertTriangle, CheckCircle, Loader, Radio } from 'lucide-react'
 
 // ตำบลทั้งหมดในจังหวัดตราด
@@ -21,7 +21,7 @@ const reportTypes = [
   { id: 'warning', label: '⚠️ แจ้งเตือนอื่นๆ' }
 ]
 
-export default function ReportForm({ onSubmitSuccess }) {
+export default function ReportForm({ userId, userName, onSubmitSuccess }) {
   const [formData, setFormData] = useState({ type: '', description: '', locationType: 'manual' })
   const [selectedDistrict, setSelectedDistrict] = useState('')
   const [selectedSubdistrict, setSelectedSubdistrict] = useState('')
@@ -92,12 +92,11 @@ export default function ReportForm({ onSubmitSuccess }) {
 
     setSubmitting(true)
 
-    // Construct Report Object
     const newReport = {
       id: `rpt_${Date.now()}`,
       type: formData.type,
-      // userId, userName removed
-      userName: 'ไม่ระบุตัวตน', // or handled by backend IP logic
+      userId: userId,
+      userName: userName || 'ไม่ระบุ',
       lat: reportLocation?.lat || null,
       lng: reportLocation?.lng || null,
       location: locationName,
@@ -107,41 +106,10 @@ export default function ReportForm({ onSubmitSuccess }) {
       description: formData.description || null,
       time: new Date().toISOString(),
       verified: false,
-      severity: 'unknown',
-      // Backend will append IP
+      severity: 'unknown'
     }
 
-    // Prepare API Payload
-    // In real app, we POST to backend. Here we simulate or use localStorage if backend not ready?
-    // User requested: "Backend must capture IP".
-    // I will try to POST to backend if possible, but existing code used localStorage.
-    // I should probably switch to API call now if I can.
-    // For now I'll maintain localStorage logic for immediate feedback but really this should be API.
-    // The instructions say "Modify ReportForm... Form submits to backend (not just localStorage)".
-    
-    try {
-        const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001'
-        const res = await fetch(`${API_BASE}/api/v1/reports`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(newReport)
-        })
-
-        if (!res.ok) {
-            // If API fails, maybe fallback? Or just error.
-            // But for now let's also save to localStorage so Admin sees it if using localStorage
-            // The instructions imply moving to backend.
-            // Let's assume backend is primary.
-            // But previous AdminDashboard read from localStorage 'userReports'. 
-            // I should update AdminDashboard to read from API or keep using localStorage for demo integrity if backend isn't ready.
-            // Phase 3 is Backend Cleanup.
-            // I'll do both: API + LocalStorage for robustness during transition.
-        }
-    } catch (err) {
-        console.error("Failed to send report to backend", err)
-    }
-
-    // Save to localStorage (Legacy support for current AdminDashboard)
+    // Save to localStorage
     const existing = JSON.parse(localStorage.getItem('userReports') || '[]')
     existing.unshift(newReport)
     localStorage.setItem('userReports', JSON.stringify(existing))
@@ -174,16 +142,6 @@ export default function ReportForm({ onSubmitSuccess }) {
       <div className="flex items-center gap-2 mb-4">
         <Radio className="w-5 h-5 text-red-500" />
         <h3 className="font-bold text-lg">แจ้งเหตุการณ์</h3>
-      </div>
-
-      {/* Legal Warning */}
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 flex gap-3 text-sm text-amber-800">
-        <AlertTriangle className="w-5 h-5 flex-shrink-0 text-amber-600" />
-        <div>
-          <span className="font-bold">คำเตือน:</span> การแจ้งเหตุเท็จมีความผิดตามกฎหมาย 
-          ระบบบันทึก IP Address ของท่านไว้เพื่อการตรวจสอบ 
-          หากตรวจพบการกระทำผิด จะถูกดำเนินคดีตามกฎหมาย
-        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">

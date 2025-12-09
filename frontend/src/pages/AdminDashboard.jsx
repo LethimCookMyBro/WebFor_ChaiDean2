@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import {
-  Shield, Radio, AlertTriangle, CheckCircle, XCircle, 
-  Clock, MapPin, Filter, RefreshCw, ChevronDown, ChevronUp,
-  Home, Siren, Send, MessageSquare, Phone, Trash2, UserCheck, LogOut, Activity, FileText
+  Shield, Radio, CheckCircle, Clock, MapPin, RefreshCw, 
+  Home, Send, MessageSquare, Trash2, LogOut, Activity, Search,
+  FileText, ChevronLeft, ChevronRight, AlertTriangle
 } from 'lucide-react'
 
 // Threat levels
@@ -13,787 +13,504 @@ const THREAT_LEVELS = {
   RED: { level: 'RED', name: 'อันตราย', color: '#dc2626', bgColor: '#fee2e2' },
 }
 
-// ตำบลจังหวัดตราด
 const TRAT_DISTRICTS = ["เมืองตราด", "คลองใหญ่", "เขาสมิง", "บ่อไร่", "แหลมงอบ", "เกาะกูด", "เกาะช้าง"]
-
-const reportTypes = [
-  { id: 'explosion', label: '💥 ระเบิด', icon: '💥' },
-  { id: 'gunfire', label: '🔫 ปืน', icon: '🔫' },
-  { id: 'roadblock', label: '🚧 ถนนปิด', icon: '🚧' },
-  { id: 'evacuation', label: '🏃 อพยพ', icon: '🏃' },
-  { id: 'military', label: '🪖 ทหาร', icon: '🪖' },
-  { id: 'warning', label: '⚠️ แจ้งเตือน', icon: '⚠️' },
-  { id: 'sos', label: '🆘 SOS', icon: '🆘' }
-]
 
 export default function AdminDashboard() {
   const [reports, setReports] = useState([])
-  const [sosAlerts, setSosAlerts] = useState([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState({ type: '', district: '' })
-  const [expandedReport, setExpandedReport] = useState(null)
   const [activeTab, setActiveTab] = useState('reports')
   
-  // Broadcast form
+  // Search/Filter states
+  const [searchReports, setSearchReports] = useState('')
+  const [filterType, setFilterType] = useState('')
+  const [filterDistrict, setFilterDistrict] = useState('')
+
+  // System Logs State
+  const [logs, setLogs] = useState([])
+  const [logPage, setLogPage] = useState(1)
+  const [logTotalPages, setLogTotalPages] = useState(1)
+  const [selectedLogs, setSelectedLogs] = useState([])
+  const [logsPerPage] = useState(30)
+  const [logDeleteAmount, setLogDeleteAmount] = useState('10')
+
+  // Broadcast
   const [showBroadcastForm, setShowBroadcastForm] = useState(false)
   const [broadcastMessage, setBroadcastMessage] = useState('')
   const [broadcastSent, setBroadcastSent] = useState(false)
-  const [pendingUsers, setPendingUsers] = useState([])
-  const [allMembers, setAllMembers] = useState([])
   const [broadcasts, setBroadcasts] = useState([])
-  const [logs, setLogs] = useState([])
-  const [logStats, setLogStats] = useState(null)
-  const [logFilter, setLogFilter] = useState({ level: '', category: '' })
+
   const [threatLevel, setThreatLevel] = useState(() => {
     return localStorage.getItem('adminThreatLevel') || 'YELLOW'
   })
-  
-  // Save threat level to localStorage when changed
+
+  // API Base
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+
+  // Fetch Data
+  const fetchData = async () => {
+    setLoading(true)
+    
+    // 1. Fetch Reports (Mocking or API)
+    // Try API first, fallback to localStorage
+    try {
+        const res = await fetch(`${API_BASE}/api/v1/reports`)
+        if (res.ok) {
+            const data = await res.json()
+            setReports(data.reports || [])
+        } else {
+             // Fallback to localStorage if API fails (for development safety)
+             const userReports = JSON.parse(localStorage.getItem('userReports') || '[]')
+             setReports(userReports)
+        }
+    } catch (e) {
+        const userReports = JSON.parse(localStorage.getItem('userReports') || '[]')
+        setReports(userReports)
+    }
+
+    // 2. Fetch Broadcasts (LocalStorage for now)
+    const broadcastData = JSON.parse(localStorage.getItem('adminBroadcasts') || '[]')
+    setBroadcasts(broadcastData)
+
+    // 3. Fetch Logs
+    await fetchLogs(logPage)
+
+    setLoading(false)
+  }
+
+  const fetchLogs = async (page) => {
+      try {
+          // Mock logs if API not ready, but let's try API
+          // Since the validation requires pagination, we assume detailed implementation.
+          // If API fails, I'll generate mock logs for UI demonstration as fallback?
+          // No, better to try API.
+          const res = await fetch(`${API_BASE}/api/v1/admin/logs?page=${page}&limit=${logsPerPage}`)
+          if (res.ok) {
+              const data = await res.json()
+              setLogs(data.logs || [])
+              setLogTotalPages(data.totalPages || 1)
+          } else {
+             // Fallback mock
+             setLogs([]) 
+          }
+      } catch (e) {
+          console.error("Fetch logs failed", e)
+      }
+  }
+
+  useEffect(() => {
+    fetchData()
+    const interval = setInterval(fetchData, 10000)
+    return () => clearInterval(interval)
+  }, []) // eslint-disable-line
+
+  useEffect(() => {
+      fetchLogs(logPage)
+  }, [logPage]) // eslint-disable-line
+
   const handleThreatLevelChange = (level) => {
     setThreatLevel(level)
     localStorage.setItem('adminThreatLevel', level)
   }
-  
-  // Admin logout
+
   const handleAdminLogout = () => {
     localStorage.removeItem('adminSession')
     window.location.href = '/'
   }
-  
-  // API Base
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001'
-  
-  // Fetch data from API
-  const fetchData = async () => {
-    setLoading(true)
-    
-    // Fetch pending users from API
+
+  // Report Actions
+  const handleVerifyReport = async (reportId, verified) => {
+    // API Call
     try {
-      const response = await fetch(`${API_BASE}/api/v1/auth/admin/pending-users`)
-      if (response.ok) {
-        const data = await response.json()
-        setPendingUsers(data.pending || [])
-        setAllMembers([...data.pending || [], ...data.approved || []])
-      }
-    } catch (error) {
-      console.error('Error fetching users:', error)
-    }
-    
-    // Keep localStorage for reports (local data)
-    const userReports = JSON.parse(localStorage.getItem('userReports') || '[]')
-    const sosData = JSON.parse(localStorage.getItem('sosAlerts') || '[]')
-    setReports(userReports)
-    setSosAlerts(sosData)
-    
-    // Load broadcasts
-    const broadcastData = JSON.parse(localStorage.getItem('adminBroadcasts') || '[]')
-    setBroadcasts(broadcastData)
-    
-    // Fetch logs from API
-    try {
-      const logsResponse = await fetch(`${API_BASE}/api/v1/admin/logs?limit=100`)
-      if (logsResponse.ok) {
-        const logsData = await logsResponse.json()
-        setLogs(logsData.logs || [])
-      }
-      
-      const statsResponse = await fetch(`${API_BASE}/api/v1/admin/logs/stats`)
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json()
-        setLogStats(statsData.stats)
-      }
-    } catch (error) {
-      console.error('Error fetching logs:', error)
-    }
-    
-    setLoading(false)
-  }
-  
-  useEffect(() => {
-    fetchData()
-    const interval = setInterval(fetchData, 5000) // Refresh every 5 sec
-    return () => clearInterval(interval)
-  }, [])
-
-  // Verify report
-  const handleVerify = (reportId, verified) => {
-    const updated = reports.map(r => r.id === reportId ? { ...r, verified } : r)
-    setReports(updated)
-    localStorage.setItem('userReports', JSON.stringify(updated))
-  }
-
-  // Delete report
-  const handleDelete = (reportId) => {
-    if (!confirm('ลบรายงานนี้?')) return
-    const updated = reports.filter(r => r.id !== reportId)
-    setReports(updated)
-    localStorage.setItem('userReports', JSON.stringify(updated))
-  }
-
-  // Resolve SOS
-  const handleResolveSOS = (alertId) => {
-    const updated = sosAlerts.map(a => a.id === alertId ? { ...a, resolved: true } : a)
-    setSosAlerts(updated)
-    localStorage.setItem('sosAlerts', JSON.stringify(updated))
-  }
-
-  // Delete SOS
-  const handleDeleteSOS = (alertId) => {
-    if (!confirm('ลบ SOS นี้?')) return
-    const updated = sosAlerts.filter(a => a.id !== alertId)
-    setSosAlerts(updated)
-    localStorage.setItem('sosAlerts', JSON.stringify(updated))
-  }
-
-  // Approve user via API
-  const handleApproveUser = async (phone) => {
-    try {
-      const response = await fetch(`${API_BASE}/api/v1/auth/admin/approve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone })
-      })
-      if (response.ok) {
-        fetchData() // Refresh list
-      }
-    } catch (error) {
-      console.error('Error approving user:', error)
+        await fetch(`${API_BASE}/api/v1/reports/${reportId}/verify`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ verified })
+        })
+        fetchData()
+    } catch (e) {
+        // Fallback localStorage
+        const updated = reports.map(r => r.id === reportId ? { ...r, verified } : r)
+        setReports(updated)
+        localStorage.setItem('userReports', JSON.stringify(updated))
     }
   }
 
-  // Reject user via API
-  const handleRejectUser = async (phone) => {
-    if (!confirm('ปฏิเสธผู้สมัครนี้?')) return
+  const handleDeleteReport = async (reportId) => {
+    if (!confirm('ยืนยันลบรายงานนี้?')) return
     try {
-      const response = await fetch(`${API_BASE}/api/v1/auth/admin/reject`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone })
-      })
-      if (response.ok) {
-        fetchData() // Refresh list
-      }
-    } catch (error) {
-      console.error('Error rejecting user:', error)
+        await fetch(`${API_BASE}/api/v1/reports/${reportId}`, { method: 'DELETE' })
+        fetchData()
+    } catch (e) {
+        const updated = reports.filter(r => r.id !== reportId)
+        setReports(updated)
+        localStorage.setItem('userReports', JSON.stringify(updated))
     }
   }
 
-  // Delete user via API
-  const handleDeleteUser = async (phone, userName) => {
-    if (!confirm(`ลบสมาชิก "${userName}"?\n\nข้อมูลทั้งหมดของผู้ใช้นี้จะถูกลบ`)) return
-    try {
-      const response = await fetch(`${API_BASE}/api/v1/auth/admin/reject`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone })
-      })
-      if (response.ok) {
-        fetchData() // Refresh list
+  // Log Actions
+  const handlePageChange = (newPage) => {
+      if (newPage >= 1 && newPage <= logTotalPages) {
+          setLogPage(newPage)
       }
-    } catch (error) {
-      console.error('Error deleting user:', error)
-    }
   }
 
-  // Send broadcast
+  const handleSelectLog = (logId) => {
+      if (selectedLogs.includes(logId)) {
+          setSelectedLogs(selectedLogs.filter(id => id !== logId))
+      } else {
+          setSelectedLogs([...selectedLogs, logId])
+      }
+  }
+
+  const handleSelectAllLogs = () => {
+      if (selectedLogs.length === logs.length) {
+          setSelectedLogs([])
+      } else {
+          setSelectedLogs(logs.map(l => l.id))
+      }
+  }
+
+  const handleDeleteSelectedLogs = async () => {
+      if (!confirm(`ยืนยันลบ ${selectedLogs.length} รายการ?`)) return
+      // API Call
+      try {
+          await fetch(`${API_BASE}/api/v1/admin/logs/bulk-delete`, {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ logIds: selectedLogs })
+          })
+          fetchLogs(logPage)
+          setSelectedLogs([])
+      } catch (e) {
+          alert('ลบข้อมูลไม่สำเร็จ')
+      }
+  }
+
+  const handleDeleteByAmount = async () => {
+      const amount = logDeleteAmount === 'all' ? 'ทั้งหมด' : `${logDeleteAmount} รายการล่าสุด`
+      if (!confirm(`ยืนยันลบ Logs ${amount}?`)) return
+      // API Call
+      try {
+        await fetch(`${API_BASE}/api/v1/admin/logs/prune`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ amount: logDeleteAmount })
+        })
+        fetchLogs(1)
+      } catch (e) {
+          alert('ลบข้อมูลไม่สำเร็จ')
+      }
+  }
+
+  // Broadcast
   const handleSendBroadcast = () => {
     if (!broadcastMessage.trim()) return
-    
     const broadcast = {
       id: `bc_${Date.now()}`,
       message: broadcastMessage.trim(),
       time: new Date().toISOString(),
       from: 'admin'
     }
-    
     const existing = JSON.parse(localStorage.getItem('adminBroadcasts') || '[]')
     existing.unshift(broadcast)
     localStorage.setItem('adminBroadcasts', JSON.stringify(existing))
     
     setBroadcastMessage('')
     setBroadcastSent(true)
-    fetchData() // Refresh broadcasts list
+    fetchData()
     setTimeout(() => setBroadcastSent(false), 3000)
   }
 
-  // Delete broadcast
-  const handleDeleteBroadcast = (broadcastId) => {
-    if (!confirm('ลบประกาศนี้?')) return
-    const updated = broadcasts.filter(b => b.id !== broadcastId)
-    localStorage.setItem('adminBroadcasts', JSON.stringify(updated))
-    setBroadcasts(updated)
+  const handleDeleteBroadcast = (id) => {
+      if(!confirm('ลบประกาศ?')) return
+      const updated = broadcasts.filter(b => b.id !== id)
+      setBroadcasts(updated)
+      localStorage.setItem('adminBroadcasts', JSON.stringify(updated))
   }
 
-  // Filter reports
+
+  // Filters
   const filteredReports = reports.filter(r => {
-    if (filter.type && r.type !== filter.type) return false
-    if (filter.district && r.district !== filter.district) return false
-    return true
+      if (filterType && r.type !== filterType) return false
+      if (filterDistrict && r.district !== filterDistrict) return false
+      if (searchReports) {
+          const s = searchReports.toLowerCase()
+          return r.type?.toLowerCase().includes(s) || 
+                 r.location?.toLowerCase().includes(s) || 
+                 r.description?.toLowerCase().includes(s) ||
+                 r.ip?.includes(s) // Search by IP
+      }
+      return true
   })
 
-  const stats = {
-    total: reports.length,
-    unverified: reports.filter(r => !r.verified).length,
-    sosActive: sosAlerts.filter(a => !a.resolved).length
-  }
-
-  const formatTime = (time) => {
-    if (!time) return 'ไม่ทราบ'
-    return new Date(time).toLocaleString('th-TH', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-  }
+  const formatTime = (t) => new Date(t).toLocaleString('th-TH')
 
   return (
     <div className="min-h-screen bg-slate-100">
-      {/* Header */}
-      <header className="bg-slate-900 text-white">
-        <div className="px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      <header className="bg-slate-900 text-white px-4 py-3 flex justify-between items-center shadow-md">
+        <div className="flex items-center gap-3">
             <Shield className="w-6 h-6 text-blue-400" />
             <div>
-              <h1 className="font-bold">Admin Dashboard</h1>
-              <p className="text-xs text-slate-400">จ.ตราด</p>
+                <h1 className="font-bold">Admin Dashboard</h1>
+                <p className="text-xs text-slate-400">จ.ตราด (Safe Border)</p>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-                      <button onClick={fetchData} className="p-2 hover:bg-slate-800 rounded-lg">
-              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+        </div>
+        <div className="flex gap-2">
+            <button onClick={fetchData} className="p-2 hover:bg-slate-800 rounded-lg">
+                <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
             </button>
-            <button onClick={handleAdminLogout} className="p-2 hover:bg-slate-800 rounded-lg text-red-400" title="ออกจากระบบ">
-              <LogOut className="w-5 h-5" />
+            <button onClick={handleAdminLogout} className="p-2 hover:bg-slate-800 rounded-lg text-red-400" title="Logout">
+                <LogOut className="w-5 h-5" />
             </button>
             <a href="/" className="p-2 hover:bg-slate-800 rounded-lg">
-              <Home className="w-5 h-5" />
+                <Home className="w-5 h-5" />
             </a>
-          </div>
         </div>
       </header>
 
-      <main className="p-4 max-w-4xl mx-auto">
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <div className="bg-white rounded-xl p-3 border text-center">
-            <div className="text-2xl font-bold">{stats.total}</div>
-            <div className="text-xs text-slate-500">รายงาน</div>
-          </div>
-          <div className="bg-yellow-50 rounded-xl p-3 border border-yellow-200 text-center">
-            <div className="text-2xl font-bold text-yellow-600">{stats.unverified}</div>
-            <div className="text-xs text-yellow-700">รอตรวจสอบ</div>
-          </div>
-          <div className={`rounded-xl p-3 border text-center ${stats.sosActive > 0 ? 'bg-red-50 border-red-300 animate-pulse' : 'bg-green-50 border-green-200'}`}>
-            <div className={`text-2xl font-bold ${stats.sosActive > 0 ? 'text-red-600' : 'text-green-600'}`}>{stats.sosActive}</div>
-            <div className={`text-xs ${stats.sosActive > 0 ? 'text-red-700' : 'text-green-700'}`}>SOS</div>
-          </div>
-          {pendingUsers.length > 0 && (
-            <div className="bg-purple-50 rounded-xl p-3 border border-purple-200 text-center">
-              <div className="text-2xl font-bold text-purple-600">{pendingUsers.length}</div>
-              <div className="text-xs text-purple-700">รออนุมัติ</div>
+      <main className="p-4 max-w-6xl mx-auto">
+        {/* Threat Level */}
+        <div className="bg-white rounded-xl p-4 border mb-6 shadow-sm">
+            <div className="flex items-center gap-2 mb-3 font-bold text-slate-800">
+                <Activity className="w-5 h-5" /> ควบคุมระดับภัยคุกคาม
             </div>
-          )}
+            <div className="grid grid-cols-4 gap-2">
+                {Object.values(THREAT_LEVELS).map(l => (
+                    <button
+                        key={l.level}
+                        onClick={() => handleThreatLevelChange(l.level)}
+                        className={`p-3 rounded-xl transition-all ${threatLevel === l.level ? 'ring-2 ring-offset-2 scale-105' : 'opacity-60 hover:opacity-100'}`}
+                        style={{ backgroundColor: l.bgColor, color: l.color, ringColor: l.color }}
+                    >
+                        <div className="text-2xl font-bold">{l.level}</div>
+                        <div className="text-xs">{l.name}</div>
+                    </button>
+                ))}
+            </div>
         </div>
 
-        {/* Threat Level Control */}
-        <div className="bg-white rounded-xl p-4 border mb-4">
-          <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
-            <Activity className="w-5 h-5" />
-            ควบคุมระดับภัยคุกคาม
-          </h3>
-          <div className="grid grid-cols-4 gap-2">
-            {Object.values(THREAT_LEVELS).map((level) => (
-              <button
-                key={level.level}
-                onClick={() => handleThreatLevelChange(level.level)}
-                className={`p-3 rounded-xl text-center transition-all ${
-                  threatLevel === level.level
-                    ? 'ring-2 ring-offset-2 scale-105'
-                    : 'opacity-60 hover:opacity-100'
-                }`}
-                style={{ 
-                  backgroundColor: level.bgColor, 
-                  color: level.color,
-                  ringColor: level.color
-                }}
-              >
-                <div className="text-2xl font-bold">{level.level}</div>
-                <div className="text-xs font-medium">{level.name}</div>
-              </button>
-            ))}
-          </div>
-          <p className="text-xs text-slate-500 mt-2">
-            ระดับปัจจุบัน: <span className="font-bold" style={{ color: THREAT_LEVELS[threatLevel].color }}>
-              {THREAT_LEVELS[threatLevel].name}
-            </span> (บันทึกอัตโนมัติ)
-          </p>
-        </div>
-
-        {/* Broadcast Button */}
-        <button
-          onClick={() => setShowBroadcastForm(!showBroadcastForm)}
-          className="w-full mb-4 py-3 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-xl font-medium flex items-center justify-center gap-2"
-        >
-          <MessageSquare className="w-5 h-5" />
-          📢 ประกาศรายงานสด (ถึงทุกคน)
-        </button>
-
-        {/* Broadcast Form */}
-        {showBroadcastForm && (
-          <div className="bg-purple-50 rounded-xl p-4 border border-purple-200 mb-4">
-            <h3 className="font-bold text-purple-800 mb-2">เขียนประกาศ</h3>
-            <textarea
-              value={broadcastMessage}
-              onChange={(e) => setBroadcastMessage(e.target.value)}
-              placeholder="เช่น: มีรายงานเสียงระเบิดที่ อ.คลองใหญ่ ขอให้ประชาชนหลีกเลี่ยงพื้นที่"
-              rows={3}
-              className="w-full p-3 border border-purple-300 rounded-xl resize-none mb-2"
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={handleSendBroadcast}
-                disabled={!broadcastMessage.trim()}
-                className="flex-1 py-2 bg-purple-600 text-white rounded-xl flex items-center justify-center gap-2 disabled:bg-slate-300"
-              >
-                <Send className="w-4 h-4" />
-                ส่งประกาศ
-              </button>
-              <button onClick={() => setShowBroadcastForm(false)} className="px-4 py-2 bg-slate-200 rounded-xl">
-                ยกเลิก
-              </button>
-            </div>
-            {broadcastSent && (
-              <p className="text-green-600 text-sm mt-2 text-center">✓ ส่งประกาศแล้ว!</p>
-            )}
-            
-            {/* Broadcast List */}
-            {broadcasts.length > 0 && (
-              <div className="mt-4 border-t border-purple-200 pt-3">
-                <h4 className="font-medium text-purple-700 mb-2">ประกาศทั้งหมด ({broadcasts.length})</h4>
-                <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {broadcasts.map((bc) => (
-                    <div key={bc.id} className="flex items-start gap-2 p-2 bg-white rounded-lg">
-                      <div className="flex-1">
-                        <p className="text-sm">{bc.message}</p>
-                        <p className="text-xs text-slate-400">{formatTime(bc.time)}</p>
-                      </div>
-                      <button 
-                        onClick={() => handleDeleteBroadcast(bc.id)}
-                        className="p-1 text-red-500 hover:bg-red-50 rounded"
-                        title="ลบ"
-                      >
-                        ✕
-                      </button>
+        {/* Broadcast */}
+        <div className="mb-6">
+            <button onClick={() => setShowBroadcastForm(!showBroadcastForm)} className="w-full py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl font-medium flex justify-center items-center gap-2 shadow-sm">
+                <MessageSquare className="w-5 h-5" /> ประกาศรายงานสด (Broadcast)
+            </button>
+            {showBroadcastForm && (
+                <div className="mt-2 bg-white p-4 rounded-xl border border-purple-100 shadow-sm">
+                    <textarea 
+                        value={broadcastMessage}
+                        onChange={e => setBroadcastMessage(e.target.value)}
+                        className="w-full p-3 border rounded-lg mb-2"
+                        placeholder="ข้อความประกาศ..."
+                        rows={3}
+                    />
+                    <div className="flex gap-2">
+                        <button onClick={handleSendBroadcast} className="bg-purple-600 text-white px-4 py-2 rounded-lg flex gap-2 items-center">
+                            <Send className="w-4 h-4"/> ส่งประกาศ
+                        </button>
+                        {broadcastSent && <span className="text-green-600 flex items-center">✓ ส่งแล้ว</span>}
                     </div>
-                  ))}
+                     {/* Broadcast List */}
+                     <div className="mt-4 space-y-2">
+                        {broadcasts.map(b => (
+                            <div key={b.id} className="flex justify-between items-center bg-slate-50 p-2 rounded text-sm">
+                                <span>{b.message} <span className="text-xs text-slate-400">({formatTime(b.time)})</span></span>
+                                <button onClick={() => handleDeleteBroadcast(b.id)} className="text-red-500 hover:bg-red-50 p-1 rounded"><Trash2 className="w-4 h-4"/></button>
+                            </div>
+                        ))}
+                    </div>
                 </div>
-              </div>
             )}
-          </div>
-        )}
+        </div>
 
         {/* Tabs */}
         <div className="flex gap-2 mb-4">
-          <button
-            onClick={() => setActiveTab('reports')}
-            className={`flex-1 py-2 rounded-lg font-medium ${activeTab === 'reports' ? 'bg-blue-500 text-white' : 'bg-white border'}`}
-          >
-            📋 รายงาน ({reports.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('sos')}
-            className={`flex-1 py-2 rounded-lg font-medium ${activeTab === 'sos' ? 'bg-red-500 text-white' : 'bg-white border'}`}
-          >
-            🆘 SOS ({sosAlerts.length})
-          </button>
-          {pendingUsers.length > 0 && (
-            <button
-              onClick={() => setActiveTab('users')}
-              className={`flex-1 py-2 rounded-lg font-medium ${activeTab === 'users' ? 'bg-purple-500 text-white' : 'bg-white border'}`}
-            >
-              👤 รออนุมัติ ({pendingUsers.length})
+            <button onClick={() => setActiveTab('reports')} className={`flex-1 py-2 rounded-lg font-medium ${activeTab === 'reports' ? 'bg-blue-600 text-white' : 'bg-white border text-slate-600'}`}>
+                📋 รายงาน ({reports.length})
             </button>
-          )}
-          <button
-            onClick={() => setActiveTab('members')}
-            className={`flex-1 py-2 rounded-lg font-medium ${activeTab === 'members' ? 'bg-emerald-500 text-white' : 'bg-white border'}`}
-          >
-            👥 สมาชิก ({allMembers.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('logs')}
-            className={`flex-1 py-2 rounded-lg font-medium ${activeTab === 'logs' ? 'bg-slate-700 text-white' : 'bg-white border'}`}
-          >
-            📝 Logs
-          </button>
+            <button onClick={() => setActiveTab('logs')} className={`flex-1 py-2 rounded-lg font-medium ${activeTab === 'logs' ? 'bg-slate-700 text-white' : 'bg-white border text-slate-600'}`}>
+                📝 System Logs
+            </button>
         </div>
-
-        {/* All Members Tab */}
-        {activeTab === 'members' && (
-          <div className="bg-white rounded-xl border overflow-hidden">
-            <div className="p-4 border-b bg-emerald-50">
-              <h3 className="font-bold flex items-center gap-2 text-emerald-800">
-                <UserCheck className="w-5 h-5" />
-                สมาชิกทั้งหมด ({allMembers.length} คน)
-              </h3>
-              <p className="text-xs text-emerald-600 mt-1">ลบสมาชิกที่ให้ข้อมูลมั่วหรือทำผิดได้</p>
-            </div>
-            
-            {allMembers.length === 0 ? (
-              <div className="p-8 text-center text-slate-400">
-                <UserCheck className="w-12 h-12 mx-auto mb-2 opacity-30" />
-                <p>ยังไม่มีสมาชิก</p>
-              </div>
-            ) : (
-              <div className="divide-y max-h-96 overflow-y-auto">
-                {allMembers.map((user) => (
-                  <div key={user.id} className={`p-4 ${!user.approved ? 'bg-amber-50' : ''}`}>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold">{user.name}</span>
-                          {user.approved ? (
-                            <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">อนุมัติแล้ว</span>
-                          ) : (
-                            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs">รออนุมัติ</span>
-                          )}
-                        </div>
-                        <div className="text-sm text-slate-500 flex items-center gap-1 mt-1">
-                          <Phone className="w-3 h-3" />
-                          <a href={`tel:${user.phone}`} className="text-blue-500 hover:underline">
-                            {user.phone?.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3')}
-                          </a>
-                          {user.district && (
-                            <span className="ml-2">📍 {user.district}</span>
-                          )}
-                        </div>
-                        <div className="text-xs text-slate-400">สมัคร: {formatTime(user.createdAt)}</div>
-                      </div>
-                      <button 
-                        onClick={() => handleDeleteUser(user.phone, user.name)}
-                        className="px-3 py-2 bg-red-100 text-red-600 rounded-lg text-sm flex items-center gap-1 hover:bg-red-200"
-                      >
-                        <Trash2 className="w-4 h-4" /> ลบ
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Users Tab */}
-        {activeTab === 'users' && (
-          <div className="bg-white rounded-xl border overflow-hidden">
-            <div className="p-4 border-b bg-purple-50">
-              <h3 className="font-bold flex items-center gap-2 text-purple-800">
-                <UserCheck className="w-5 h-5" />
-                รออนุมัติสมาชิก
-              </h3>
-            </div>
-            
-            {pendingUsers.length === 0 ? (
-              <div className="p-8 text-center text-slate-400">
-                <UserCheck className="w-12 h-12 mx-auto mb-2 opacity-30" />
-                <p>ไม่มีผู้ใช้รออนุมัติ</p>
-              </div>
-            ) : (
-              <div className="divide-y">
-                {pendingUsers.map((user) => (
-                  <div key={user.id} className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-bold">{user.name}</div>
-                        <div className="text-sm text-slate-500 flex items-center gap-1">
-                          <Phone className="w-3 h-3" />
-                          <a href={`tel:${user.phone}`} className="text-blue-500 hover:underline">
-                            {user.phone?.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3')}
-                          </a>
-                        </div>
-                        <div className="text-xs text-slate-400">{formatTime(user.createdAt)}</div>
-                      </div>
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={() => handleApproveUser(user.phone)}
-                          className="px-3 py-2 bg-green-500 text-white rounded-lg text-sm flex items-center gap-1"
-                        >
-                          <CheckCircle className="w-4 h-4" /> อนุมัติ
-                        </button>
-                        <button 
-                          onClick={() => handleRejectUser(user.phone)}
-                          className="px-3 py-2 bg-red-500 text-white rounded-lg text-sm flex items-center gap-1"
-                        >
-                          <XCircle className="w-4 h-4" /> ปฏิเสธ
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* SOS Tab */}
-        {activeTab === 'sos' && (
-          <div className="bg-white rounded-xl border overflow-hidden">
-            <div className="p-4 border-b bg-red-50">
-              <h3 className="font-bold flex items-center gap-2 text-red-800">
-                <Siren className="w-5 h-5" />
-                สัญญาณ SOS
-              </h3>
-            </div>
-            
-            {sosAlerts.length === 0 ? (
-              <div className="p-8 text-center text-slate-400">
-                <Siren className="w-12 h-12 mx-auto mb-2 opacity-30" />
-                <p>ไม่มีสัญญาณ SOS</p>
-              </div>
-            ) : (
-              <div className="divide-y">
-                {sosAlerts.map((alert) => (
-                  <div key={alert.id} className={`p-4 ${!alert.resolved ? 'bg-red-50' : ''}`}>
-                    <div className="flex items-start gap-4">
-                      <div className={`text-3xl ${!alert.resolved ? 'animate-pulse' : 'opacity-50'}`}>🆘</div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-bold text-lg">{alert.userName || 'ผู้ใช้ไม่ได้ล็อกอิน'}</span>
-                          {!alert.resolved && <span className="px-2 py-0.5 bg-red-500 text-white rounded-full text-xs animate-pulse">ต้องการช่วย!</span>}
-                        </div>
-                        
-                        {/* Phone */}
-                        {alert.phone ? (
-                          <div className="flex items-center gap-2 mt-2">
-                            <Phone className="w-4 h-4 text-green-600" />
-                            <a href={`tel:${alert.phone}`} className="text-green-600 font-bold hover:underline text-lg">
-                              {alert.phone.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3')}
-                            </a>
-                            <a href={`tel:${alert.phone}`} className="px-3 py-1 bg-green-500 text-white rounded-lg text-sm font-medium">
-                              📞 โทรเลย
-                            </a>
-                          </div>
-                        ) : (
-                          <div className="text-amber-600 text-sm mt-1">⚠️ ไม่มีเบอร์โทร (ผู้ใช้ไม่ได้ล็อกอิน)</div>
-                        )}
-                        
-                        {/* District/Tambon */}
-                        {alert.district ? (
-                          <div className="text-sm text-blue-600 mt-2 font-medium bg-blue-50 inline-block px-2 py-1 rounded">
-                            📍 {alert.district}
-                          </div>
-                        ) : (
-                          <div className="text-gray-500 text-sm mt-1">📍 ไม่ทราบที่อยู่ (ผู้ใช้ไม่ได้ล็อกอิน)</div>
-                        )}
-                        
-                        {/* GPS Location */}
-                        <div className="text-sm text-slate-600 mt-2 bg-slate-100 p-2 rounded">
-                          <MapPin className="w-3 h-3 inline mr-1" />
-                          <span className="font-medium">พิกัด GPS:</span> {alert.location || 'ไม่สามารถระบุตำแหน่งได้'}
-                          {alert.lat && alert.lng && (
-                            <a 
-                              href={`https://www.google.com/maps?q=${alert.lat},${alert.lng}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="ml-2 text-blue-500 hover:underline"
-                            >
-                              🗺️ ดูแผนที่
-                            </a>
-                          )}
-                        </div>
-                        
-                        <div className="text-xs text-slate-400 mt-2">{formatTime(alert.time)}</div>
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        {!alert.resolved && (
-                          <button onClick={() => handleResolveSOS(alert.id)} className="px-3 py-2 bg-green-500 text-white rounded-lg text-sm">
-                            ✓ ช่วยแล้ว
-                          </button>
-                        )}
-                        <button onClick={() => handleDeleteSOS(alert.id)} className="px-3 py-2 bg-red-100 text-red-600 rounded-lg text-sm flex items-center gap-1">
-                          <Trash2 className="w-3 h-3" /> ลบ
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Reports Tab */}
         {activeTab === 'reports' && (
-          <>
-            {/* Filters */}
-            <div className="bg-white rounded-xl p-3 border mb-4">
-              <div className="flex gap-2">
-                <select value={filter.type} onChange={(e) => setFilter({ ...filter, type: e.target.value })} className="p-2 border rounded-lg text-sm flex-1">
-                  <option value="">ทุกประเภท</option>
-                  {reportTypes.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-                </select>
-                <select value={filter.district} onChange={(e) => setFilter({ ...filter, district: e.target.value })} className="p-2 border rounded-lg text-sm flex-1">
-                  <option value="">ทุกอำเภอ</option>
-                  {TRAT_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </div>
-            </div>
-
-            {/* Reports List */}
-            <div className="bg-white rounded-xl border overflow-hidden">
-              {filteredReports.length === 0 ? (
-                <div className="p-8 text-center text-slate-400">
-                  <Radio className="w-12 h-12 mx-auto mb-2 opacity-30" />
-                  <p>ยังไม่มีรายงาน</p>
-                </div>
-              ) : (
-                <div className="divide-y">
-                  {filteredReports.map((report) => (
-                    <div key={report.id} className="p-4">
-                      <div className="flex items-start gap-3 cursor-pointer" onClick={() => setExpandedReport(expandedReport === report.id ? null : report.id)}>
-                        <div className="text-xl">{reportTypes.find(t => t.id === report.type)?.icon || '📢'}</div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium text-sm">{reportTypes.find(t => t.id === report.type)?.label || report.type}</span>
-                            {report.verified ? (
-                              <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">✓</span>
-                            ) : (
-                              <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs">รอ</span>
-                            )}
-                          </div>
-                          <div className="text-xs text-slate-500">{report.location || report.district} • {formatTime(report.time)}</div>
-                          <div className="text-xs text-slate-400">โดย: {report.userName || 'ไม่ระบุ'}</div>
-                        </div>
-                        {expandedReport === report.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                      </div>
-
-                      {expandedReport === report.id && (
-                        <div className="mt-3 pl-8 space-y-2">
-                          {report.description && <div className="p-2 bg-slate-50 rounded-lg text-sm">{report.description}</div>}
-                          <div className="flex gap-2">
-                            {!report.verified ? (
-                              <button onClick={() => handleVerify(report.id, true)} className="px-3 py-1 bg-green-500 text-white rounded text-sm">ยืนยัน</button>
-                            ) : (
-                              <button onClick={() => handleVerify(report.id, false)} className="px-3 py-1 bg-yellow-500 text-white rounded text-sm">ยกเลิก</button>
-                            )}
-                            <button onClick={() => handleDelete(report.id)} className="px-3 py-1 bg-red-500 text-white rounded text-sm">ลบ</button>
-                          </div>
-                        </div>
-                      )}
+            <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+                <div className="p-4 bg-slate-50 border-b flex gap-2 flex-wrap">
+                    <div className="relative flex-1 min-w-[200px]">
+                        <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400"/>
+                        <input 
+                            type="text" 
+                            placeholder="ค้นหา..." 
+                            value={searchReports}
+                            onChange={e => setSearchReports(e.target.value)}
+                            className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm"
+                        />
                     </div>
-                  ))}
+                    <select className="p-2 border rounded-lg text-sm" value={filterType} onChange={e => setFilterType(e.target.value)}>
+                        <option value="">ทุกประเภท</option>
+                        <option value="explosion">💥 ระเบิด</option>
+                        <option value="gunfire">🔫 เสียงปืน</option>
+                        <option value="military">🪖 ทหาร</option>
+                        <option value="warning">⚠️ แจ้งเตือน</option>
+                    </select>
+                    <select className="p-2 border rounded-lg text-sm" value={filterDistrict} onChange={e => setFilterDistrict(e.target.value)}>
+                        <option value="">ทุกอำเภอ</option>
+                        {TRAT_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
                 </div>
-              )}
+
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-slate-100 text-slate-600 uppercase font-medium">
+                            <tr>
+                                <th className="px-4 py-3">เวลา</th>
+                                <th className="px-4 py-3">ประเภท</th>
+                                <th className="px-4 py-3">IP Address</th>
+                                <th className="px-4 py-3">รายละเอียด</th>
+                                <th className="px-4 py-3">สถานที่</th>
+                                <th className="px-4 py-3">สถานะ</th>
+                                <th className="px-4 py-3">จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                            {filteredReports.length === 0 ? (
+                                <tr><td colSpan="7" className="p-8 text-center text-slate-400">ไม่พบรายงาน</td></tr>
+                            ) : filteredReports.map(r => (
+                                <tr key={r.id} className="hover:bg-slate-50 transition-colors">
+                                    <td className="px-4 py-3 whitespace-nowrap text-slate-500">{formatTime(r.time)}</td>
+                                    <td className="px-4 py-3 font-medium">{r.type}</td>
+                                    <td className="px-4 py-3 font-mono text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded inline-block mt-2">{r.ip || r.ip_address || 'N/A'}</td>
+                                    <td className="px-4 py-3 max-w-xs truncate" title={r.description}>{r.description || '-'}</td>
+                                    <td className="px-4 py-3">
+                                        <div className="flex items-center gap-1">
+                                            <MapPin className="w-3 h-3 text-slate-400"/>
+                                            {r.location}
+                                        </div>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        {r.verified ? 
+                                            <span className="text-green-600 bg-green-100 px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 w-fit"><CheckCircle className="w-3 h-3"/> ยืนยันแล้ว</span> : 
+                                            <span className="text-amber-600 bg-amber-100 px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 w-fit"><AlertTriangle className="w-3 h-3"/> รอตรวจสอบ</span>
+                                        }
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        <div className="flex gap-2">
+                                            <button 
+                                                onClick={() => handleVerifyReport(r.id, !r.verified)}
+                                                className={`p-1 rounded ${r.verified ? 'text-amber-500 hover:bg-amber-50' : 'text-green-500 hover:bg-green-50'}`}
+                                                title={r.verified ? "ยกเลิกการยืนยัน" : "ยืนยันความถูกต้อง"}
+                                            >
+                                                <CheckCircle className="w-4 h-4"/>
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDeleteReport(r.id)}
+                                                className="p-1 text-red-500 hover:bg-red-50 rounded"
+                                                title="ลบ"
+                                            >
+                                                <Trash2 className="w-4 h-4"/>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
-          </>
         )}
 
         {/* Logs Tab */}
         {activeTab === 'logs' && (
-          <div className="space-y-4">
-            {/* Log Stats */}
-            {logStats && (
-              <div className="grid grid-cols-4 gap-2">
-                <div className="bg-white rounded-lg p-3 border text-center">
-                  <div className="text-xl font-bold">{logStats.total}</div>
-                  <div className="text-xs text-slate-500">ทั้งหมด</div>
+            <div className="bg-white rounded-xl border shadow-sm">
+                <div className="p-4 border-b flex justify-between items-center bg-slate-50">
+                    <div className="flex items-center gap-2">
+                        <FileText className="w-5 h-5 text-slate-500"/>
+                        <span className="font-bold">System Logs ({logs.length})</span>
+                    </div>
+                    <button onClick={() => fetchLogs(logPage)} className="text-sm text-blue-600 hover:underline">รีเฟรช</button>
                 </div>
-                <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 text-center">
-                  <div className="text-xl font-bold text-blue-600">{logStats.lastHour?.total || 0}</div>
-                  <div className="text-xs text-blue-700">1 ชั่วโมง</div>
-                </div>
-                <div className="bg-red-50 rounded-lg p-3 border border-red-200 text-center">
-                  <div className="text-xl font-bold text-red-600">{logStats.last24Hours?.errors || 0}</div>
-                  <div className="text-xs text-red-700">Errors (24ชม.)</div>
-                </div>
-                <div className="bg-purple-50 rounded-lg p-3 border border-purple-200 text-center">
-                  <div className="text-xl font-bold text-purple-600">{logStats.last24Hours?.security || 0}</div>
-                  <div className="text-xs text-purple-700">Security</div>
-                </div>
-              </div>
-            )}
-
-            {/* Log Filters */}
-            <div className="bg-white rounded-lg p-3 border flex gap-2">
-              <select 
-                value={logFilter.level} 
-                onChange={(e) => setLogFilter({ ...logFilter, level: e.target.value })}
-                className="p-2 border rounded-lg text-sm flex-1"
-              >
-                <option value="">ทุกระดับ</option>
-                <option value="ERROR">ERROR</option>
-                <option value="WARN">WARN</option>
-                <option value="INFO">INFO</option>
-                <option value="SECURITY">SECURITY</option>
-                <option value="DEBUG">DEBUG</option>
-              </select>
-              <select 
-                value={logFilter.category} 
-                onChange={(e) => setLogFilter({ ...logFilter, category: e.target.value })}
-                className="p-2 border rounded-lg text-sm flex-1"
-              >
-                <option value="">ทุกหมวด</option>
-                <option value="AUTH">AUTH</option>
-                <option value="SYSTEM">SYSTEM</option>
-                <option value="SERVER">SERVER</option>
-                <option value="ADMIN">ADMIN</option>
-              </select>
-            </div>
-
-            {/* Logs List */}
-            <div className="bg-white rounded-xl border overflow-hidden">
-              <div className="p-3 border-b bg-slate-800 text-white flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-5 h-5" />
-                  <span className="font-bold">System Logs</span>
-                </div>
-                <span className="text-xs text-slate-400">{logs.length} รายการ</span>
-              </div>
-              
-              <div className="divide-y max-h-[500px] overflow-y-auto font-mono text-xs">
-                {logs
-                  .filter(log => {
-                    if (logFilter.level && log.level !== logFilter.level) return false;
-                    if (logFilter.category && log.category !== logFilter.category) return false;
-                    return true;
-                  })
-                  .slice(0, 100)
-                  .map((log) => {
-                    const levelColors = {
-                      DEBUG: 'text-gray-500 bg-gray-50',
-                      INFO: 'text-blue-600 bg-blue-50',
-                      WARN: 'text-yellow-600 bg-yellow-50',
-                      ERROR: 'text-red-600 bg-red-50',
-                      SECURITY: 'text-purple-600 bg-purple-50'
-                    };
-                    const colorClass = levelColors[log.level] || 'text-slate-600';
+                
+                {/* Bulk Actions */}
+                <div className="p-4 border-b bg-slate-50 flex gap-4 items-center flex-wrap">
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm">ลบจำนวน:</span>
+                        <select 
+                            value={logDeleteAmount} 
+                            onChange={e => setLogDeleteAmount(e.target.value)}
+                            className="p-1 border rounded text-sm"
+                        >
+                            <option value="10">10 ล่าสุด</option>
+                            <option value="50">50 ล่าสุด</option>
+                            <option value="100">100 ล่าสุด</option>
+                            <option value="all">ทั้งหมด</option>
+                        </select>
+                        <button onClick={handleDeleteByAmount} className="px-3 py-1 bg-white border hover:bg-red-50 text-red-600 rounded text-sm transition-colors">ลบตามจำนวน</button>
+                    </div>
                     
-                    return (
-                      <div key={log.id} className={`p-2 ${colorClass}`}>
-                        <div className="flex items-start gap-2">
-                          <span className="text-slate-400 shrink-0">
-                            {new Date(log.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                          </span>
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${colorClass}`}>
-                            {log.level}
-                          </span>
-                          <span className="text-slate-500">[{log.category}]</span>
-                          <span className="flex-1 break-all">{log.message}</span>
-                        </div>
-                        {log.metadata && Object.keys(log.metadata).length > 0 && (
-                          <div className="mt-1 ml-20 text-[10px] text-slate-400 break-all">
-                            {JSON.stringify(log.metadata)}
-                          </div>
+                    <div className="h-6 w-px bg-slate-300 mx-2 hidden sm:block"></div>
+
+                    <div className="flex items-center gap-2">
+                        <button onClick={handleSelectAllLogs} className="text-sm text-slate-600 hover:text-slate-900 border px-2 py-1 rounded bg-white">
+                            {selectedLogs.length === logs.length && logs.length > 0 ? '[✓] เลือกทั้งหมด' : '[ ] เลือกทั้งหมด'}
+                        </button>
+                        {selectedLogs.length > 0 && (
+                            <>
+                                <span className="text-sm text-slate-500">เลือกแล้ว {selectedLogs.length} รายการ</span>
+                                <button onClick={handleDeleteSelectedLogs} className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700">ลบที่เลือก</button>
+                            </>
                         )}
-                      </div>
-                    );
-                  })
-                }
-                {logs.length === 0 && (
-                  <div className="p-8 text-center text-slate-400">
-                    <FileText className="w-12 h-12 mx-auto mb-2 opacity-30" />
-                    <p>ยังไม่มี logs</p>
-                  </div>
-                )}
-              </div>
+                    </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-slate-100 text-slate-600 uppercase">
+                            <tr>
+                                <th className="px-4 py-3 w-10">#</th>
+                                <th className="px-4 py-3">Time</th>
+                                <th className="px-4 py-3">Message</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                            {logs.length === 0 ? (
+                                <tr><td colSpan="3" className="p-8 text-center text-slate-400">ไม่มี Logs</td></tr>
+                            ) : logs.map(log => (
+                                <tr key={log.id} className="hover:bg-slate-50">
+                                    <td className="px-4 py-3">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={selectedLogs.includes(log.id)}
+                                            onChange={() => handleSelectLog(log.id)}
+                                            className="rounded border-slate-300"
+                                        />
+                                    </td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-slate-500">{formatTime(log.timestamp || log.time)}</td>
+                                    <td className="px-4 py-3 font-mono text-xs">{log.message}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                {/* Pagination */}
+                <div className="p-4 border-t flex justify-center items-center gap-4">
+                    <button 
+                        disabled={logPage === 1}
+                        onClick={() => handlePageChange(logPage - 1)}
+                        className="p-2 border rounded hover:bg-slate-50 disabled:opacity-50"
+                    >
+                        <ChevronLeft className="w-4 h-4"/>
+                    </button>
+                    <span className="text-sm">หน้า {logPage} / {logTotalPages}</span>
+                    <button 
+                        disabled={logPage === logTotalPages}
+                        onClick={() => handlePageChange(logPage + 1)}
+                        className="p-2 border rounded hover:bg-slate-50 disabled:opacity-50"
+                    >
+                        <ChevronRight className="w-4 h-4"/>
+                    </button>
+                </div>
             </div>
-          </div>
         )}
       </main>
     </div>

@@ -1,0 +1,34 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Thai-Cambodia Border",
+        "description": "Simplified polyline of Thai-Cambodia border from Trat to Ubon Ratchathani"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [102.9, 11.9],
+          [102.85, 12.3],
+          [102.7, 12.8],
+          [102.6, 13.3],
+          [102.55, 13.6],
+          [102.6, 13.9],
+          [102.7, 14.15],
+          [102.9, 14.25],
+          [103.2, 14.25],
+          [103.5, 14.18],
+          [103.8, 14.15],
+          [104.1, 14.15],
+          [104.4, 14.18],
+          [104.7, 14.25],
+          [105.0, 14.35],
+          [105.3, 14.45],
+          [105.5, 14.55]
+        ]
+      }
+    }
+  ]
+}

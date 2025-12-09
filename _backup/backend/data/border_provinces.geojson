@@ -1,0 +1,140 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name_th": "บุรีรัมย์",
+        "name_en": "Buriram",
+        "province_code": "31"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [102.5, 14.2],
+          [103.5, 14.2],
+          [103.8, 14.8],
+          [103.5, 15.2],
+          [102.8, 15.3],
+          [102.3, 14.9],
+          [102.5, 14.2]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name_th": "สุรินทร์",
+        "name_en": "Surin",
+        "province_code": "32"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [103.5, 14.2],
+          [104.3, 14.2],
+          [104.5, 14.8],
+          [104.2, 15.3],
+          [103.5, 15.2],
+          [103.5, 14.2]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name_th": "ศรีสะเกษ",
+        "name_en": "Sisaket",
+        "province_code": "33"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [104.3, 14.2],
+          [104.9, 14.3],
+          [105.2, 14.8],
+          [104.9, 15.4],
+          [104.2, 15.3],
+          [104.3, 14.2]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name_th": "อุบลราชธานี",
+        "name_en": "Ubon Ratchathani",
+        "province_code": "34"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [104.9, 14.3],
+          [105.6, 14.5],
+          [105.8, 15.2],
+          [105.5, 16.0],
+          [104.8, 15.8],
+          [104.9, 15.4],
+          [104.9, 14.3]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name_th": "สระแก้ว",
+        "name_en": "Sa Kaeo",
+        "province_code": "27"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [102.0, 13.5],
+          [102.7, 13.4],
+          [102.8, 14.1],
+          [102.5, 14.2],
+          [101.9, 14.0],
+          [102.0, 13.5]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name_th": "จันทบุรี",
+        "name_en": "Chanthaburi",
+        "province_code": "22"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [101.8, 12.4],
+          [102.5, 12.5],
+          [102.7, 13.4],
+          [102.0, 13.5],
+          [101.5, 13.0],
+          [101.8, 12.4]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name_th": "ตราด",
+        "name_en": "Trat",
+        "province_code": "23"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [102.5, 11.8],
+          [102.9, 11.9],
+          [102.9, 12.5],
+          [102.5, 12.5],
+          [102.3, 12.2],
+          [102.5, 11.8]
+        ]]
+      }
+    }
+  ]
+}
