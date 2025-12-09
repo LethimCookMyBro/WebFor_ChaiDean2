@@ -1,3 +1,4 @@
+require("dotenv").config();
 /**
  * Border Safety Risk Checker - API Server
  * 
@@ -59,8 +60,10 @@ const parseOrigins = () => {
   // Default allowed origins
   return [
     'http://localhost:5173',
+    'http://localhost:5174',
     'http://localhost:3000',
-    'http://127.0.0.1:5173'
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:5174'
   ];
 };
 

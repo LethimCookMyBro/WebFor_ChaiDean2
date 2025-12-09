@@ -1,33 +1,54 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { Siren, Phone, MapPin, CheckCircle } from 'lucide-react'
+import { Siren, Phone, MapPin, CheckCircle, Navigation } from 'lucide-react'
 
 /**
  * SOSButton Component
  * กดค้าง 3 วินาที → บันทึกลง localStorage → แสดงใน Admin
+ * ใช้ GPS ตำแหน่งของผู้ใช้เอง (ไม่ใช่ครอบครัว)
  */
 export default function SOSButton({ userId, userName, userPhone, userDistrict, onSOSTriggered }) {
   const [isHolding, setIsHolding] = useState(false)
   const [progress, setProgress] = useState(0)
   const [sent, setSent] = useState(false)
   const [location, setLocation] = useState(null)
+  const [gpsStatus, setGpsStatus] = useState('idle') // idle, getting, success, error
   const holdTimer = useRef(null)
   const progressTimer = useRef(null)
   const HOLD_DURATION = 3000
 
-  // Get location
+  // Get GPS on mount
   useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        () => console.log('GPS not available')
-      )
-    }
+    requestGPS()
   }, [])
+
+  // Request current GPS location
+  const requestGPS = () => {
+    if (!navigator.geolocation) {
+      setGpsStatus('error')
+      return
+    }
+    
+    setGpsStatus('getting')
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+        setGpsStatus('success')
+      },
+      (err) => {
+        console.log('GPS error:', err.message)
+        setGpsStatus('error')
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    )
+  }
 
   const startHold = useCallback(() => {
     if (sent) return
     setIsHolding(true)
     setProgress(0)
+    
+    // Request fresh GPS when starting to hold
+    requestGPS()
     
     const startTime = Date.now()
     progressTimer.current = setInterval(() => {
@@ -62,30 +83,13 @@ export default function SOSButton({ userId, userName, userPhone, userDistrict, o
       resolved: false
     }
 
-    // Save to SOS alerts
+    // Save to SOS alerts (Admin only)
     const existingAlerts = JSON.parse(localStorage.getItem('sosAlerts') || '[]')
     existingAlerts.unshift(sosAlert)
     localStorage.setItem('sosAlerts', JSON.stringify(existingAlerts))
 
-    // Also save as report
-    const sosReport = {
-      id: `rpt_sos_${Date.now()}`,
-      type: 'sos',
-      userId: userId,
-      userName: userName || 'ผู้ใช้',
-      lat: location?.lat,
-      lng: location?.lng,
-      location: sosAlert.location,
-      province: 'ตราด',
-      description: '🆘 ส่งสัญญาณ SOS ฉุกเฉิน',
-      source: userName || 'ผู้ใช้',
-      time: new Date().toISOString(),
-      verified: true,
-      severity: 'critical'
-    }
-    const existingReports = JSON.parse(localStorage.getItem('userReports') || '[]')
-    existingReports.unshift(sosReport)
-    localStorage.setItem('userReports', JSON.stringify(existingReports))
+    // NOTE: SOS alerts are NOT saved to public reports (userReports)
+    // They are ONLY visible in Admin Dashboard for privacy/safety
 
     console.log('SOS saved:', sosAlert)
     onSOSTriggered?.({ success: true, alert: sosAlert })

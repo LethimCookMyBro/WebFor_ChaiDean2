@@ -54,7 +54,8 @@ export default function LiveReports({ userLocation = null }) {
       roadblock: '🚧',
       evacuation: '🏃',
       military: '🪖',
-      warning: '⚠️'
+      warning: '⚠️',
+      sos: '🆘'
     }
     return icons[type] || '📢'
   }
@@ -66,7 +67,8 @@ export default function LiveReports({ userLocation = null }) {
       roadblock: 'ถนนปิด',
       evacuation: 'จุดอพยพ',
       military: 'การเคลื่อนพล',
-      warning: 'แจ้งเตือน'
+      warning: 'แจ้งเตือน',
+      sos: 'สัญญาณ SOS'
     }
     return labels[type] || 'รายงาน'
   }
@@ -74,6 +76,7 @@ export default function LiveReports({ userLocation = null }) {
   const getSeverityColor = (severity) => {
     const colors = {
       high: 'bg-red-500',
+      critical: 'bg-red-600',
       medium: 'bg-orange-500',
       low: 'bg-yellow-500',
       info: 'bg-blue-500'
@@ -174,6 +177,20 @@ export default function LiveReports({ userLocation = null }) {
                       <span className="truncate">{report.location}</span>
                     </div>
                     
+                    {/* Show user info for SOS */}
+                    {report.type === 'sos' && (
+                      <div className="bg-red-900/30 rounded-lg p-2 mt-2">
+                        <div className="text-sm text-red-300">
+                          <span className="font-medium">ผู้แจ้ง:</span> {report.userName || 'ไม่ระบุชื่อ'}
+                        </div>
+                        {report.userPhone && (
+                          <a href={`tel:${report.userPhone}`} className="text-sm text-green-400 hover:underline">
+                            📞 {report.userPhone.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3')}
+                          </a>
+                        )}
+                      </div>
+                    )}
+                    
                     {report.description && (
                       <p className="text-sm text-slate-400 mt-1">
                         {report.description}
@@ -181,9 +198,9 @@ export default function LiveReports({ userLocation = null }) {
                     )}
                     
                     <div className="flex items-center justify-between mt-2 text-xs text-slate-500">
-                      <span>{report.timeAgo || report.timeFormatted}</span>
+                      <span>{report.timeAgo || new Date(report.time).toLocaleString('th-TH', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
                       <span>
-                        {report.distance ? `${report.distance} กม.` : report.source || ''}
+                        {report.distance ? `${report.distance} กม.` : report.source || report.userName || ''}
                       </span>
                     </div>
                   </div>

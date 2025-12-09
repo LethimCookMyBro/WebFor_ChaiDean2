@@ -11,26 +11,67 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 })
 
-// เส้นชายแดน
+// เส้นชายแดนตราด–กัมพูชา (อ้างอิงแนวเขาพนมดงรัก–คลองใหญ่–ไม้รูด)
 const BORDER_LINE = [
-  [11.6833, 102.9167],
-  [11.7500, 102.9000],
-  [11.8500, 102.8800],
-  [11.9500, 102.8600],
-  [12.1000, 102.8400],
-  [12.2500, 102.8600],
-  [12.3500, 102.8800],
+  [11.6625, 102.9110], // หาดเล็ก
+  [11.7205, 102.8925], // คลองใหญ่ใต้
+  [11.8050, 102.8650], // ไม้รูด
+  [11.9150, 102.8400], // ชายแดนบ่อไร่
+  [12.0600, 102.8250], // เขาสมิงตะวันออก
+  [12.1700, 102.8200], // เชื่อมจุดเหนือ
 ]
 
-// เขตอันตราย - 5 ระดับ
+// เขตอันตราย - 5 ระดับ (พิกัดและรัศมีปรับตามภูมิประเทศจริง)
 const DANGER_ZONES = [
-  { center: [11.6900, 102.9100], radius: 5000, level: "critical", name: "ด่านหาดเล็ก (0-5 กม.)" },
-  { center: [11.7200, 102.8900], radius: 10000, level: "critical", name: "ชายแดนใต้ (5-10 กม.)" },
-  { center: [11.8333, 102.8500], radius: 20000, level: "high", name: "ไม้รูด (10-20 กม.)" },
-  { center: [12.3000, 102.8333], radius: 15000, level: "high", name: "บ่อไร่ (15-20 กม.)" },
-  { center: [12.0000, 102.7000], radius: 30000, level: "moderate", name: "พื้นที่กลาง (20-50 กม.)" },
-  { center: [12.2428, 102.5177], radius: 40000, level: "low", name: "เมืองตราด (50-90 กม.)" },
-  { center: [12.0500, 102.3500], radius: 30000, level: "safe", name: "เกาะช้าง (ปลอดภัย)" },
+  // 0–5 km จากชายแดน
+  { 
+    center: [11.6740, 102.9050], 
+    radius: 4500, 
+    level: "critical", 
+    name: "ด่านหาดเล็ก (0–5 กม.)" 
+  },
+  // 5–10 km
+  { 
+    center: [11.7205, 102.8925], 
+    radius: 9000, 
+    level: "critical", 
+    name: "คลองใหญ่–ชายแดนใต้ (5–10 กม.)" 
+  },
+  // 10–20 km
+  { 
+    center: [11.8200, 102.8550], 
+    radius: 18000, 
+    level: "high", 
+    name: "ไม้รูด (10–20 กม.)" 
+  },
+  // 15–25 km
+  { 
+    center: [12.0100, 102.8350], 
+    radius: 22000, 
+    level: "high", 
+    name: "บ่อไร่ (15–25 กม.)" 
+  },
+  // 25–45 km (พื้นที่ตัดกลางจังหวัด)
+  { 
+    center: [12.1300, 102.7500], 
+    radius: 35000, 
+    level: "moderate", 
+    name: "เขาสมิง–กลางจังหวัด (25–45 กม.)" 
+  },
+  // 45–70 km (อ.เมืองตราด)
+  { 
+    center: [12.2500, 102.5177], 
+    radius: 50000, 
+    level: "low", 
+    name: "เมืองตราด (45–70 กม.)" 
+  },
+  // ปลอดภัย – เกาะช้าง
+  { 
+    center: [12.0500, 102.3500], 
+    radius: 30000, 
+    level: "safe", 
+    name: "เกาะช้าง (ปลอดภัย)" 
+  },
 ]
 
 const RISK_COLORS = {
@@ -43,18 +84,18 @@ const RISK_COLORS = {
 
 const TRAT_CENTER = [12.0500, 102.6000]
 
-// Available marker colors
-const MARKER_COLORS = [
-  { id: 'purple', name: 'ม่วง', color: '#8b5cf6' },
-  { id: 'blue', name: 'ฟ้า', color: '#3b82f6' },
-  { id: 'green', name: 'เขียว', color: '#22c55e' },
-  { id: 'red', name: 'แดง', color: '#ef4444' },
-  { id: 'orange', name: 'ส้ม', color: '#f97316' },
-  { id: 'yellow', name: 'เหลือง', color: '#eab308' },
+// Zone filter levels
+const ZONE_LEVELS = [
+  { id: 'critical', name: 'อันตรายสูงสุด (0-10 กม.)', color: '#dc2626' },
+  { id: 'high', name: 'อันตรายสูง (10-20 กม.)', color: '#ea580c' },
+  { id: 'moderate', name: 'เสี่ยงปานกลาง (20-50 กม.)', color: '#f59e0b' },
+  { id: 'low', name: 'เสี่ยงต่ำ (50-90 กม.)', color: '#84cc16' },
+  { id: 'safe', name: 'ปลอดภัย (90+ กม.)', color: '#22c55e' },
 ]
 
-// User marker
-function UserMarker({ position, color = '#8b5cf6' }) {
+// User marker - always blue
+function UserMarker({ position }) {
+  const color = '#3b82f6' // Fixed blue color
   const map = useMap()
   useEffect(() => {
     if (position) map.flyTo(position, 11, { duration: 1 })
@@ -66,9 +107,9 @@ function UserMarker({ position, color = '#8b5cf6' }) {
     <Marker 
       position={position}
       icon={L.divIcon({
-        html: `<div style="background-color: ${color}; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 0 3px ${color}40;"></div>`,
-        iconSize: [16, 16],
-        iconAnchor: [8, 8]
+        html: `<div style="background-color: ${color}; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.5);"></div>`,
+        iconSize: [20, 20],
+        iconAnchor: [10, 10]
       })}
     >
       <Popup><strong>ตำแหน่งของคุณ</strong></Popup>
@@ -78,10 +119,20 @@ function UserMarker({ position, color = '#8b5cf6' }) {
 
 export default function MapTab() {
   const [userPosition, setUserPosition] = useState(null)
-  const [showZones, setShowZones] = useState(true)
   const [showBorder, setShowBorder] = useState(true)
   const [loading, setLoading] = useState(false)
-  const [markerColor, setMarkerColor] = useState('#8b5cf6')
+  // Individual zone visibility controls
+  const [visibleZones, setVisibleZones] = useState({
+    critical: true,
+    high: true,
+    moderate: true,
+    low: true,
+    safe: true
+  })
+
+  const toggleZone = (zoneId) => {
+    setVisibleZones(prev => ({ ...prev, [zoneId]: !prev[zoneId] }))
+  }
   
   const getUserLocation = () => {
     setLoading(true)
@@ -108,7 +159,7 @@ export default function MapTab() {
           <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           
           {/* Risk Zones */}
-          {showZones && DANGER_ZONES.map((zone, i) => (
+          {DANGER_ZONES.filter(zone => visibleZones[zone.level]).map((zone, i) => (
             <Circle
               key={i}
               center={zone.center}
@@ -116,7 +167,7 @@ export default function MapTab() {
               pathOptions={{
                 color: RISK_COLORS[zone.level],
                 fillColor: RISK_COLORS[zone.level],
-                fillOpacity: 0.2,
+                fillOpacity: 0.25,
                 weight: 2
               }}
             >
@@ -137,7 +188,7 @@ export default function MapTab() {
             <Polyline positions={BORDER_LINE} pathOptions={{ color: '#dc2626', weight: 3, dashArray: '10, 5' }} />
           )}
           
-          <UserMarker position={userPosition} color={markerColor} />
+          <UserMarker position={userPosition} />
         </MapContainer>
         
         <button
@@ -150,41 +201,35 @@ export default function MapTab() {
         </button>
       </div>
 
-      {/* Marker Color Selector */}
-      <div className="bg-white rounded-xl p-4 border border-slate-200">
-        <h3 className="font-bold mb-3">🎨 เลือกสี Marker ตำแหน่ง</h3>
-        <div className="flex flex-wrap gap-2">
-          {MARKER_COLORS.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setMarkerColor(c.color)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all ${
-                markerColor === c.color 
-                  ? 'border-slate-800 bg-slate-100' 
-                  : 'border-transparent hover:bg-slate-50'
-              }`}
-            >
-              <div 
-                className="w-5 h-5 rounded-full border-2 border-white shadow"
-                style={{ backgroundColor: c.color }}
-              />
-              <span className="text-sm">{c.name}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-      
-      {/* Controls */}
+      {/* Controls - Zone Selection */}
       <div className="bg-white rounded-xl p-4 border border-slate-200">
         <h3 className="font-bold mb-3 flex items-center gap-2">
           <MapIcon className="w-5 h-5" />
           ควบคุมชั้นข้อมูล
         </h3>
-        <div className="flex gap-4">
-          <label className="flex items-center gap-2 cursor-pointer text-sm">
-            <input type="checkbox" checked={showZones} onChange={(e) => setShowZones(e.target.checked)} className="w-4 h-4 rounded" />
-            🔴 เขตอันตราย (5 ระดับ)
-          </label>
+        
+        {/* Individual Zone Toggles */}
+        <p className="text-sm text-slate-500 mb-2">🔴 เขตอันตราย (เลือกแสดง/ซ่อนแต่ละระดับ)</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
+          {ZONE_LEVELS.map((zone) => (
+            <label key={zone.id} className="flex items-center gap-2 cursor-pointer text-sm p-2 rounded-lg hover:bg-slate-50 transition-colors">
+              <input 
+                type="checkbox" 
+                checked={visibleZones[zone.id]} 
+                onChange={() => toggleZone(zone.id)} 
+                className="w-4 h-4 rounded" 
+              />
+              <div 
+                className="w-4 h-4 rounded-full border border-white shadow"
+                style={{ backgroundColor: zone.color }}
+              />
+              <span>{zone.name}</span>
+            </label>
+          ))}
+        </div>
+        
+        {/* Border Toggle */}
+        <div className="border-t pt-3">
           <label className="flex items-center gap-2 cursor-pointer text-sm">
             <input type="checkbox" checked={showBorder} onChange={(e) => setShowBorder(e.target.checked)} className="w-4 h-4 rounded" />
             🚧 เส้นชายแดน
@@ -194,30 +239,16 @@ export default function MapTab() {
       
       {/* Legend */}
       <div className="bg-white rounded-xl p-4 border border-slate-200">
-        <h3 className="font-bold mb-3">คำอธิบายสัญลักษณ์ (5 ระดับ)</h3>
+        <h3 className="font-bold mb-3">คำอธิบายสัญลักษณ์</h3>
         <div className="grid grid-cols-2 gap-2 text-sm">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-red-600" />
-            <span>อันตรายสูงสุด (0-10 กม.)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-orange-500" />
-            <span>อันตรายสูง (10-20 กม.)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-amber-500" />
-            <span>เสี่ยงปานกลาง (20-50 กม.)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-lime-500" />
-            <span>เสี่ยงต่ำ (50-90 กม.)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-green-500" />
-            <span>ปลอดภัย (90+ กม.)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-purple-500" />
+          {ZONE_LEVELS.map((zone) => (
+            <div key={zone.id} className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded-full" style={{ backgroundColor: zone.color }} />
+              <span>{zone.name}</span>
+            </div>
+          ))}
+          <div className="flex items-center gap-2 col-span-2 border-t pt-2 mt-1">
+            <div className="w-4 h-4 rounded-full bg-blue-500" />
             <span>ตำแหน่งของคุณ</span>
           </div>
         </div>

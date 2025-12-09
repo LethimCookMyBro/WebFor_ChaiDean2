@@ -231,14 +231,36 @@ router.post('/login', async (req, res) => {
       });
     }
     
-    // TODO: In production, verify phone against database
-    // For now, simulate phone-based login
-    // This should check allUsers in actual implementation
+    // Check if user is in approved users
+    const approvedUsers = global.approvedUsers || new Map();
+    const pendingUsers = global.pendingUsers || new Map();
     
-    const mockUserId = `user_${phone}`;
+    // Check pending first
+    if (pendingUsers.has(phone)) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        pending: true,
+        message: 'บัญชีของคุณรออนุมัติจาก Admin'
+      });
+    }
+    
+    // Check approved users
+    let userData = approvedUsers.get(phone);
+    
+    // If not found in approved, allow login but with limited info
+    // (This is for development; in production, only approved users should login)
+    if (!userData) {
+      userData = {
+        name: 'ผู้ใช้',
+        phone: phone,
+        district: null
+      };
+    }
+    
+    const userId = `user_${phone}`;
     
     // Generate tokens
-    const tokens = generateTokenPair(mockUserId, { phone });
+    const tokens = generateTokenPair(userId, { phone });
     
     // Record successful login
     recordLoginAttempt(phone, true);
@@ -250,14 +272,84 @@ router.post('/login', async (req, res) => {
       success: true,
       message: 'เข้าสู่ระบบสำเร็จ',
       user: {
-        id: mockUserId,
-        phone
+        id: userId,
+        name: userData.name || 'ผู้ใช้',
+        phone: phone,
+        district: userData.district || null
       },
       expiresIn: tokens.expiresIn
     });
     
   } catch (error) {
     console.error('[AUTH] Login error:', error.message);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'เกิดข้อผิดพลาด กรุณาลองใหม่'
+    });
+  }
+});
+
+/**
+ * POST /api/v1/auth/register
+ * User registration (pending admin approval)
+ */
+router.post('/register', async (req, res) => {
+  try {
+    const { name, phone, district } = req.body;
+    
+    // Input validation
+    if (!name || typeof name !== 'string' || name.trim().length < 2) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'กรุณาใส่ชื่อจริง (อย่างน้อย 2 ตัวอักษร)'
+      });
+    }
+    
+    if (!phone || typeof phone !== 'string' || phone.length !== 10) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'กรุณาใส่เบอร์โทร 10 หลัก'
+      });
+    }
+    
+    if (!district || typeof district !== 'string') {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'กรุณาเลือกอำเภอ'
+      });
+    }
+    
+    // TODO: In production, save to database and mark as pending approval
+    // For now, store in memory (will be lost on restart)
+    const pendingUsers = global.pendingUsers || (global.pendingUsers = new Map());
+    
+    // Check if already registered
+    if (pendingUsers.has(phone)) {
+      return res.status(409).json({
+        error: 'Conflict',
+        message: 'เบอร์โทรนี้ลงทะเบียนแล้ว กรุณารอการอนุมัติ'
+      });
+    }
+    
+    // Store pending user
+    pendingUsers.set(phone, {
+      name: name.trim(),
+      phone,
+      district,
+      status: 'pending',
+      registeredAt: new Date().toISOString()
+    });
+    
+    console.log(`[AUTH] New registration: ${name} (${phone}) from ${district}`);
+    
+    res.status(201).json({
+      success: true,
+      pending: true,
+      message: 'ลงทะเบียนสำเร็จ กรุณารอ Admin อนุมัติ'
+    });
+    
+  } catch (error) {
+    console.error('[AUTH] Register error:', error.message);
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'เกิดข้อผิดพลาด กรุณาลองใหม่'
@@ -307,13 +399,23 @@ router.post('/admin/login', async (req, res) => {
     }
     
     // Check password
+    // Development credentials (WARNING: Remove in production!)
+    const DEV_PASSWORD = 'Trat_forTestJang$_+190';
+    const isProduction = process.env.NODE_ENV === 'production';
+    
     let isValidPassword = false;
-    if (adminPasswordHash) {
+    
+    // In development, check plain text password first
+    if (!isProduction && (password === DEV_PASSWORD)) {
+      isValidPassword = true;
+      console.log('[AUTH] Admin login using development credentials');
+    } else if (adminPasswordHash) {
+      // Use hashed password in production or if hash is provided
       isValidPassword = await verifyPassword(password, adminPasswordHash);
-    } else {
-      // Development fallback - REMOVE IN PRODUCTION
+    } else if (!isProduction) {
+      // Fallback to dev password if no hash set
       console.warn('[AUTH] WARNING: ADMIN_PASSWORD_HASH not set, using development fallback');
-      isValidPassword = password === 'DevAdmin2024!@#';
+      isValidPassword = password === DEV_PASSWORD;
     }
     
     if (!isValidPassword) {
@@ -482,6 +584,104 @@ router.post('/validate-password', (req, res) => {
     valid: result.valid,
     errors: result.errors
   });
+});
+
+// ============================================
+// Admin APIs for User Management
+// ============================================
+
+/**
+ * GET /api/v1/auth/admin/pending-users
+ * Get all pending user registrations
+ */
+router.get('/admin/pending-users', (req, res) => {
+  try {
+    const pendingUsers = global.pendingUsers || new Map();
+    const approvedUsers = global.approvedUsers || new Map();
+    
+    const pendingList = Array.from(pendingUsers.values()).map(u => ({
+      ...u,
+      id: u.phone // Use phone as unique ID
+    }));
+    
+    const approvedList = Array.from(approvedUsers.values()).map(u => ({
+      ...u,
+      id: u.phone,
+      approved: true
+    }));
+    
+    res.json({
+      pending: pendingList,
+      approved: approvedList,
+      total: pendingList.length + approvedList.length
+    });
+  } catch (error) {
+    console.error('[AUTH] Get pending users error:', error.message);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+/**
+ * POST /api/v1/auth/admin/approve
+ * Approve a pending user
+ */
+router.post('/admin/approve', (req, res) => {
+  try {
+    const { phone } = req.body;
+    
+    if (!phone) {
+      return res.status(400).json({ error: 'Phone required' });
+    }
+    
+    const pendingUsers = global.pendingUsers || new Map();
+    const approvedUsers = global.approvedUsers || (global.approvedUsers = new Map());
+    
+    const user = pendingUsers.get(phone);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Move to approved
+    user.approvedAt = new Date().toISOString();
+    user.status = 'approved';
+    approvedUsers.set(phone, user);
+    pendingUsers.delete(phone);
+    
+    console.log(`[AUTH] User approved: ${user.name} (${phone})`);
+    
+    res.json({ success: true, message: 'อนุมัติสำเร็จ' });
+  } catch (error) {
+    console.error('[AUTH] Approve error:', error.message);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+/**
+ * POST /api/v1/auth/admin/reject
+ * Reject/delete a pending user
+ */
+router.post('/admin/reject', (req, res) => {
+  try {
+    const { phone } = req.body;
+    
+    if (!phone) {
+      return res.status(400).json({ error: 'Phone required' });
+    }
+    
+    const pendingUsers = global.pendingUsers || new Map();
+    const approvedUsers = global.approvedUsers || new Map();
+    
+    // Remove from both
+    pendingUsers.delete(phone);
+    approvedUsers.delete(phone);
+    
+    console.log(`[AUTH] User rejected/deleted: ${phone}`);
+    
+    res.json({ success: true, message: 'ลบสำเร็จ' });
+  } catch (error) {
+    console.error('[AUTH] Reject error:', error.message);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
 });
 
 module.exports = router;

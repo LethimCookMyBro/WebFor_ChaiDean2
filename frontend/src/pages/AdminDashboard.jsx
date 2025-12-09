@@ -40,18 +40,30 @@ export default function AdminDashboard() {
     window.location.href = '/'
   }
   
-  // Fetch data
-  const fetchData = () => {
+  // API Base
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+  
+  // Fetch data from API
+  const fetchData = async () => {
     setLoading(true)
+    
+    // Fetch pending users from API
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/auth/admin/pending-users`)
+      if (response.ok) {
+        const data = await response.json()
+        setPendingUsers(data.pending || [])
+        setAllMembers([...data.pending || [], ...data.approved || []])
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error)
+    }
+    
+    // Keep localStorage for reports (local data)
     const userReports = JSON.parse(localStorage.getItem('userReports') || '[]')
     const sosData = JSON.parse(localStorage.getItem('sosAlerts') || '[]')
-    const allUsers = JSON.parse(localStorage.getItem('allUsers') || '[]')
-    const pending = allUsers.filter(u => !u.approved)
-    const approved = allUsers.filter(u => u.approved)
     setReports(userReports)
     setSosAlerts(sosData)
-    setPendingUsers(pending)
-    setAllMembers(allUsers)
     
     // Load broadcasts
     const broadcastData = JSON.parse(localStorage.getItem('adminBroadcasts') || '[]')
@@ -96,38 +108,54 @@ export default function AdminDashboard() {
     localStorage.setItem('sosAlerts', JSON.stringify(updated))
   }
 
-  // Approve user
-  const handleApproveUser = (userId) => {
-    const allUsers = JSON.parse(localStorage.getItem('allUsers') || '[]')
-    const updated = allUsers.map(u => u.id === userId ? { ...u, approved: true } : u)
-    localStorage.setItem('allUsers', JSON.stringify(updated))
-    setPendingUsers(updated.filter(u => !u.approved))
+  // Approve user via API
+  const handleApproveUser = async (phone) => {
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/auth/admin/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone })
+      })
+      if (response.ok) {
+        fetchData() // Refresh list
+      }
+    } catch (error) {
+      console.error('Error approving user:', error)
+    }
   }
 
-  // Reject user
-  const handleRejectUser = (userId) => {
+  // Reject user via API
+  const handleRejectUser = async (phone) => {
     if (!confirm('ปฏิเสธผู้สมัครนี้?')) return
-    const allUsers = JSON.parse(localStorage.getItem('allUsers') || '[]')
-    const updated = allUsers.filter(u => u.id !== userId)
-    localStorage.setItem('allUsers', JSON.stringify(updated))
-    setPendingUsers(updated.filter(u => !u.approved))
-    setAllMembers(updated)
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/auth/admin/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone })
+      })
+      if (response.ok) {
+        fetchData() // Refresh list
+      }
+    } catch (error) {
+      console.error('Error rejecting user:', error)
+    }
   }
 
-  // Delete user (for bad data or violations)
-  const handleDeleteUser = (userId, userName) => {
+  // Delete user via API
+  const handleDeleteUser = async (phone, userName) => {
     if (!confirm(`ลบสมาชิก "${userName}"?\n\nข้อมูลทั้งหมดของผู้ใช้นี้จะถูกลบ`)) return
-    const allUsers = JSON.parse(localStorage.getItem('allUsers') || '[]')
-    const updated = allUsers.filter(u => u.id !== userId)
-    localStorage.setItem('allUsers', JSON.stringify(updated))
-    
-    // Also clean up user-specific data
-    localStorage.removeItem(`user_${userId}_reports`)
-    localStorage.removeItem(`user_${userId}_family`)
-    localStorage.removeItem(`user_${userId}_sos`)
-    
-    setPendingUsers(updated.filter(u => !u.approved))
-    setAllMembers(updated)
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/auth/admin/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone })
+      })
+      if (response.ok) {
+        fetchData() // Refresh list
+      }
+    } catch (error) {
+      console.error('Error deleting user:', error)
+    }
   }
 
   // Send broadcast
@@ -361,7 +389,7 @@ export default function AdminDashboard() {
                         <div className="text-xs text-slate-400">สมัคร: {formatTime(user.createdAt)}</div>
                       </div>
                       <button 
-                        onClick={() => handleDeleteUser(user.id, user.name)}
+                        onClick={() => handleDeleteUser(user.phone, user.name)}
                         className="px-3 py-2 bg-red-100 text-red-600 rounded-lg text-sm flex items-center gap-1 hover:bg-red-200"
                       >
                         <Trash2 className="w-4 h-4" /> ลบ
@@ -406,13 +434,13 @@ export default function AdminDashboard() {
                       </div>
                       <div className="flex gap-2">
                         <button 
-                          onClick={() => handleApproveUser(user.id)}
+                          onClick={() => handleApproveUser(user.phone)}
                           className="px-3 py-2 bg-green-500 text-white rounded-lg text-sm flex items-center gap-1"
                         >
                           <CheckCircle className="w-4 h-4" /> อนุมัติ
                         </button>
                         <button 
-                          onClick={() => handleRejectUser(user.id)}
+                          onClick={() => handleRejectUser(user.phone)}
                           className="px-3 py-2 bg-red-500 text-white rounded-lg text-sm flex items-center gap-1"
                         >
                           <XCircle className="w-4 h-4" /> ปฏิเสธ
@@ -448,30 +476,52 @@ export default function AdminDashboard() {
                     <div className="flex items-start gap-4">
                       <div className={`text-3xl ${!alert.resolved ? 'animate-pulse' : 'opacity-50'}`}>🆘</div>
                       <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold">{alert.userName || 'ผู้ใช้'}</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-lg">{alert.userName || 'ผู้ใช้ไม่ได้ล็อกอิน'}</span>
                           {!alert.resolved && <span className="px-2 py-0.5 bg-red-500 text-white rounded-full text-xs animate-pulse">ต้องการช่วย!</span>}
                         </div>
-                        {alert.phone && (
-                          <div className="flex items-center gap-2 mt-1">
-                            <Phone className="w-3 h-3 text-green-600" />
-                            <a href={`tel:${alert.phone}`} className="text-green-600 font-medium hover:underline">
+                        
+                        {/* Phone */}
+                        {alert.phone ? (
+                          <div className="flex items-center gap-2 mt-2">
+                            <Phone className="w-4 h-4 text-green-600" />
+                            <a href={`tel:${alert.phone}`} className="text-green-600 font-bold hover:underline text-lg">
                               {alert.phone.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3')}
                             </a>
-                            <a href={`tel:${alert.phone}`} className="px-2 py-1 bg-green-500 text-white rounded text-xs">
-                              📞 โทร
+                            <a href={`tel:${alert.phone}`} className="px-3 py-1 bg-green-500 text-white rounded-lg text-sm font-medium">
+                              📞 โทรเลย
                             </a>
                           </div>
+                        ) : (
+                          <div className="text-amber-600 text-sm mt-1">⚠️ ไม่มีเบอร์โทร (ผู้ใช้ไม่ได้ล็อกอิน)</div>
                         )}
-                        {alert.district && (
-                          <div className="text-sm text-blue-600 mt-1 font-medium">
-                            📍 อ.{alert.district}
+                        
+                        {/* District/Tambon */}
+                        {alert.district ? (
+                          <div className="text-sm text-blue-600 mt-2 font-medium bg-blue-50 inline-block px-2 py-1 rounded">
+                            📍 {alert.district}
                           </div>
+                        ) : (
+                          <div className="text-gray-500 text-sm mt-1">📍 ไม่ทราบที่อยู่ (ผู้ใช้ไม่ได้ล็อกอิน)</div>
                         )}
-                        <div className="text-sm text-slate-500 mt-1">
-                          <MapPin className="w-3 h-3 inline" /> {alert.location}
+                        
+                        {/* GPS Location */}
+                        <div className="text-sm text-slate-600 mt-2 bg-slate-100 p-2 rounded">
+                          <MapPin className="w-3 h-3 inline mr-1" />
+                          <span className="font-medium">พิกัด GPS:</span> {alert.location || 'ไม่สามารถระบุตำแหน่งได้'}
+                          {alert.lat && alert.lng && (
+                            <a 
+                              href={`https://www.google.com/maps?q=${alert.lat},${alert.lng}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="ml-2 text-blue-500 hover:underline"
+                            >
+                              🗺️ ดูแผนที่
+                            </a>
+                          )}
                         </div>
-                        <div className="text-xs text-slate-400">{formatTime(alert.time)}</div>
+                        
+                        <div className="text-xs text-slate-400 mt-2">{formatTime(alert.time)}</div>
                       </div>
                       <div className="flex flex-col gap-2">
                         {!alert.resolved && (

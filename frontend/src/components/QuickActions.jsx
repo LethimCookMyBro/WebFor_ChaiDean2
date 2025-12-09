@@ -13,7 +13,7 @@ export default function QuickActions({ onSOSClick, onCheckClick }) {
       >
         <Zap className="w-8 h-8" />
         <span className="font-bold">ปุ่มฉุกเฉิน</span>
-        <span className="text-xs opacity-80">แจ้งตำแหน่งครอบครัว</span>
+        <span className="text-xs opacity-80">ส่งตำแหน่งของคุณ</span>
       </button>
       <button
         onClick={onCheckClick}

@@ -160,10 +160,12 @@ export function AuthProvider({ children }) {
       throw new Error(data.message || 'เข้าสู่ระบบไม่สำเร็จ')
     }
     
-    // Set user in memory
+    // Set user in memory with ALL user data
     setUser({
       id: data.user.id,
+      name: data.user.name || 'ผู้ใช้',
       phone: data.user.phone,
+      district: data.user.district || null,
       authenticated: true
     })
     

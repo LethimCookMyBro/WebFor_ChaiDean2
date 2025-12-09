@@ -1,21 +1,8 @@
 import { useState, useCallback } from 'react'
-import { MapPin, Navigation, AlertTriangle } from 'lucide-react'
+import { MapPin, Navigation, AlertTriangle, ChevronDown } from 'lucide-react'
 import WeaponRangeCard from '../components/WeaponRangeCard'
 import RiskBars from '../components/RiskBars'
-
-// ข้อมูลอำเภอจังหวัดตราด (ข้อมูลจริง)
-const TRAT_DISTRICTS = {
-  'เมืองตราด': { lat: 12.2428, lng: 102.5177 },
-  'คลองใหญ่': { lat: 11.7667, lng: 102.8833 },
-  'เขาสมิง': { lat: 12.4000, lng: 102.6500 },
-  'บ่อไร่': { lat: 12.3833, lng: 102.8000 },
-  'แหลมงอบ': { lat: 12.1833, lng: 102.3833 },
-  'เกาะกูด': { lat: 11.6500, lng: 102.5667 },
-  'เกาะช้าง': { lat: 12.0500, lng: 102.3500 },
-}
-
-// จุดชายแดน (ด่านหาดเล็ก)
-const BORDER_POINT = { lat: 11.6833, lng: 102.9167, name: "ด่านหาดเล็ก" }
+import { TRAT_TAMBONS, BORDER_POINT, findNearestTambon, getAllTambons } from '../data/tratTambons'
 
 // คำนวณระยะทาง Haversine
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -33,40 +20,63 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
 }
 
 const getRiskLevel = (distance) => {
-  if (distance <= 20) return { level: 'CRITICAL', color: '#dc2626', text: 'อันตรายสูงสุด' }
-  if (distance <= 52) return { level: 'HIGH', color: '#ea580c', text: 'อันตรายสูง' }
-  if (distance <= 130) return { level: 'MODERATE', color: '#f59e0b', text: 'เสี่ยงปานกลาง' }
+  if (distance <= 10) return { level: 'CRITICAL', color: '#dc2626', text: 'อันตรายสูงสุด' }
+  if (distance <= 20) return { level: 'HIGH', color: '#ea580c', text: 'อันตรายสูง' }
+  if (distance <= 50) return { level: 'MODERATE', color: '#f59e0b', text: 'เสี่ยงปานกลาง' }
+  if (distance <= 90) return { level: 'LOW', color: '#84cc16', text: 'เสี่ยงต่ำ' }
   return { level: 'SAFE', color: '#22c55e', text: 'ปลอดภัย' }
 }
 
 export default function CheckTab() {
-  const [selectedDistrict, setSelectedDistrict] = useState('')
+  const [selectedAmphoe, setSelectedAmphoe] = useState('')
+  const [selectedTambon, setSelectedTambon] = useState('')
   const [distanceFromBorder, setDistanceFromBorder] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [locationSource, setLocationSource] = useState(null) // 'gps' or 'district'
+  const [locationSource, setLocationSource] = useState(null) // 'gps' or 'tambon'
+  const [locationInfo, setLocationInfo] = useState(null) // { amphoe, tambon }
 
-  // Handle district selection
-  const handleDistrictChange = (e) => {
-    const district = e.target.value
-    setSelectedDistrict(district)
+  // Get tambons for selected amphoe
+  const getTambonsForAmphoe = (amphoe) => {
+    return amphoe && TRAT_TAMBONS[amphoe] ? Object.keys(TRAT_TAMBONS[amphoe]) : []
+  }
+
+  // Handle amphoe selection
+  const handleAmphoeChange = (e) => {
+    const amphoe = e.target.value
+    setSelectedAmphoe(amphoe)
+    setSelectedTambon('')
     setError(null)
     setLocationSource(null)
     setDistanceFromBorder(null)
+    setLocationInfo(null)
+  }
 
-    if (district && TRAT_DISTRICTS[district]) {
-      const d = TRAT_DISTRICTS[district]
-      const distance = calculateDistance(d.lat, d.lng, BORDER_POINT.lat, BORDER_POINT.lng)
+  // Handle tambon selection
+  const handleTambonChange = (e) => {
+    const tambon = e.target.value
+    setSelectedTambon(tambon)
+    setError(null)
+
+    if (tambon && selectedAmphoe && TRAT_TAMBONS[selectedAmphoe]?.[tambon]) {
+      const coords = TRAT_TAMBONS[selectedAmphoe][tambon]
+      const distance = calculateDistance(coords.lat, coords.lng, BORDER_POINT.lat, BORDER_POINT.lng)
       setDistanceFromBorder(Math.round(distance))
-      setLocationSource('district')
+      setLocationSource('tambon')
+      setLocationInfo({ amphoe: selectedAmphoe, tambon, inTrat: true })
     }
   }
 
-  // Get GPS location
+  // Get GPS location and find nearest tambon
   const getGPSLocation = useCallback(() => {
+    // Reset all state first
     setLoading(true)
     setError(null)
-    setSelectedDistrict('')
+    setSelectedAmphoe('')
+    setSelectedTambon('')
+    setDistanceFromBorder(null)
+    setLocationInfo(null)
+    setLocationSource(null)
 
     if (!navigator.geolocation) {
       setError('เบราว์เซอร์ไม่รองรับ GPS')
@@ -80,16 +90,44 @@ export default function CheckTab() {
         const dist = calculateDistance(latitude, longitude, BORDER_POINT.lat, BORDER_POINT.lng)
         setDistanceFromBorder(Math.round(dist))
         setLocationSource('gps')
+        
+        // Find nearest tambon
+        const nearest = findNearestTambon(latitude, longitude)
+        
+        // Check if user is actually in/near Trat province (within ~100km of any tambon)
+        if (nearest && nearest.distance < 50) {
+          // User is in Trat province
+          setLocationInfo({
+            amphoe: nearest.amphoe,
+            tambon: nearest.tambon,
+            distance: nearest.distance.toFixed(1),
+            inTrat: true
+          })
+        } else {
+          // User is outside Trat province
+          setLocationInfo({
+            amphoe: null,
+            tambon: null,
+            distance: nearest ? nearest.distance.toFixed(0) : null,
+            inTrat: false,
+            userLat: latitude.toFixed(4),
+            userLng: longitude.toFixed(4)
+          })
+        }
+        
         setLoading(false)
       },
       (err) => {
         console.error('GPS error:', err)
-        setError('ไม่สามารถเข้าถึง GPS ได้ กรุณาเลือกอำเภอ')
+        setError('ไม่สามารถเข้าถึง GPS ได้ กรุณาเลือกอำเภอ/ตำบล')
         setLoading(false)
       },
       { enableHighAccuracy: true, timeout: 10000 }
     )
   }, [])
+
+  const amphoeList = Object.keys(TRAT_TAMBONS)
+  const tambonList = getTambonsForAmphoe(selectedAmphoe)
 
   return (
     <div className="space-y-4">
@@ -102,27 +140,59 @@ export default function CheckTab() {
         <p className="text-sm opacity-80 mt-1">คำนวณระยะจากด่านหาดเล็ก (ชายแดนไทย-กัมพูชา)</p>
       </div>
 
-      {/* Input */}
+      {/* Input - Amphoe and Tambon Selection */}
       <div className="bg-white rounded-2xl p-4 border border-slate-200">
         <div className="space-y-3">
+          {/* Amphoe Selection */}
           <label className="block">
-            <span className="text-sm text-slate-600 mb-1 block">เลือกอำเภอในจังหวัดตราด</span>
-            <select
-              value={selectedDistrict}
-              onChange={handleDistrictChange}
-              className="w-full p-3 border border-slate-300 rounded-xl text-lg bg-white"
-            >
-              <option value="">-- เลือกอำเภอ --</option>
-              {Object.keys(TRAT_DISTRICTS).map((district) => (
-                <option key={district} value={district}>{district}</option>
-              ))}
-            </select>
+            <span className="text-sm text-slate-600 mb-1 block font-medium">เลือกอำเภอ</span>
+            <div className="relative">
+              <select
+                value={selectedAmphoe}
+                onChange={handleAmphoeChange}
+                className="w-full p-3 border border-slate-300 rounded-xl text-lg bg-white appearance-none pr-10"
+              >
+                <option value="">-- เลือกอำเภอ --</option>
+                {amphoeList.map((amphoe) => (
+                  <option key={amphoe} value={amphoe}>อ.{amphoe}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+            </div>
           </label>
 
+          {/* Tambon Selection */}
+          {selectedAmphoe && (
+            <label className="block animate-fadeIn">
+              <span className="text-sm text-slate-600 mb-1 block font-medium">เลือกตำบล</span>
+              <div className="relative">
+                <select
+                  value={selectedTambon}
+                  onChange={handleTambonChange}
+                  className="w-full p-3 border border-slate-300 rounded-xl text-lg bg-white appearance-none pr-10"
+                >
+                  <option value="">-- เลือกตำบล --</option>
+                  {tambonList.map((tambon) => (
+                    <option key={tambon} value={tambon}>ต.{tambon}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+              </div>
+            </label>
+          )}
+
+          {/* Divider */}
+          <div className="flex items-center gap-3 py-2">
+            <div className="flex-1 h-px bg-slate-200"></div>
+            <span className="text-sm text-slate-400">หรือ</span>
+            <div className="flex-1 h-px bg-slate-200"></div>
+          </div>
+
+          {/* GPS Button */}
           <button
             onClick={getGPSLocation}
             disabled={loading}
-            className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white p-3 rounded-xl flex items-center justify-center gap-2"
+            className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white p-3 rounded-xl flex items-center justify-center gap-2 transition-colors"
           >
             {loading ? (
               <>
@@ -160,11 +230,40 @@ export default function CheckTab() {
             <div className="text-sm opacity-80">
               ระยะห่างจาก {BORDER_POINT.name}
               {locationSource === 'gps' && ' (GPS)'}
-              {locationSource === 'district' && ` (อ.${selectedDistrict})`}
+              {locationSource === 'tambon' && ` (ต.${selectedTambon})`}
             </div>
             <div className="text-5xl font-bold my-2">{distanceFromBorder} กม.</div>
             <div className="text-xl font-medium">{getRiskLevel(distanceFromBorder).text}</div>
           </div>
+
+          {/* Location Info */}
+          {locationInfo && (
+            <div className={`rounded-xl p-4 border ${locationInfo.inTrat ? 'bg-blue-50 border-blue-200' : 'bg-amber-50 border-amber-200'}`}>
+              <div className={`flex items-center gap-2 ${locationInfo.inTrat ? 'text-blue-800' : 'text-amber-800'}`}>
+                <MapPin className="w-5 h-5 flex-shrink-0" />
+                <div>
+                  <div className="font-medium">ตำแหน่งของคุณ</div>
+                  {locationInfo.inTrat ? (
+                    <div className="text-sm">
+                      ต.{locationInfo.tambon} อ.{locationInfo.amphoe} จ.ตราด
+                      {locationSource === 'gps' && locationInfo.distance && (
+                        <span className="text-blue-600"> (ห่างจากจุดศูนย์กลางตำบล ~{locationInfo.distance} กม.)</span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-sm">
+                      <span className="font-medium">คุณอยู่นอกจังหวัดตราด</span>
+                      <br />
+                      <span>พิกัด GPS: {locationInfo.userLat}, {locationInfo.userLng}</span>
+                      {locationInfo.distance && (
+                        <span className="text-amber-600"> (ห่างจากตราดประมาณ {locationInfo.distance} กม.)</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Weapon Range */}
           <WeaponRangeCard distanceFromBorder={distanceFromBorder} />

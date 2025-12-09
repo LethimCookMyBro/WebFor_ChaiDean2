@@ -16,21 +16,31 @@ const { hashToken } = require('../utils/crypto');
 // Configuration - No fallbacks, require env vars
 // ============================================
 
-const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET;
+// Development fallback for JWT_SECRET
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const DEV_JWT_SECRET = 'dev-secret-key-for-development-only-do-not-use-in-production-12345';
+
+let JWT_SECRET = process.env.JWT_SECRET;
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || DEV_JWT_SECRET;
 const ACCESS_TOKEN_EXPIRY = '15m';
 const REFRESH_TOKEN_EXPIRY = '7d';
 const BCRYPT_COST = 12;
 
 // Validate required environment variables on load
 if (!JWT_SECRET) {
-  console.error('\n❌ FATAL: JWT_SECRET environment variable is required');
-  console.error('   Generate one with: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"');
-  console.error('   Add it to your .env file or environment\n');
-  process.exit(1);
+  if (NODE_ENV === 'production') {
+    console.error('\n❌ FATAL: JWT_SECRET environment variable is required in production');
+    console.error('   Generate one with: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"');
+    console.error('   Add it to your .env file or environment\n');
+    process.exit(1);
+  } else {
+    console.warn('\n⚠️ WARNING: JWT_SECRET not set, using development fallback (NOT SECURE!)');
+    console.warn('   Generate one with: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"');
+    JWT_SECRET = DEV_JWT_SECRET;
+  }
 }
 
-if (JWT_SECRET.length < 32) {
+if (JWT_SECRET.length < 32 && NODE_ENV === 'production') {
   console.error('\n❌ FATAL: JWT_SECRET must be at least 32 characters');
   process.exit(1);
 }

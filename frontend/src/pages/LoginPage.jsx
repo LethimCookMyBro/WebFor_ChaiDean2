@@ -1,9 +1,13 @@
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { User, Phone, LogIn, UserPlus, Shield, AlertCircle, Clock } from 'lucide-react'
+import { User, Phone, LogIn, UserPlus, Shield, AlertCircle, Clock, MapPin, ChevronDown } from 'lucide-react'
+import { TRAT_TAMBONS } from '../data/tratTambons'
+
+// API base URL
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 
 export default function LoginPage({ onSuccess }) {
-  const { login, register, pendingApproval } = useAuth()
+  const { login, isLoggedIn } = useAuth()
   const [mode, setMode] = useState('login') // 'login' or 'register'
   const [realName, setRealName] = useState('')
   const [phone, setPhone] = useState('')
@@ -11,17 +15,18 @@ export default function LoginPage({ onSuccess }) {
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
   const [showPending, setShowPending] = useState(false)
+  const [pendingUser, setPendingUser] = useState(null)
+  const [selectedAmphoe, setSelectedAmphoe] = useState('')
+  const [selectedTambon, setSelectedTambon] = useState('')
 
-  // ตำบลจังหวัดตราด
-  const TRAT_DISTRICTS = [
-    "เมืองตราด",
-    "คลองใหญ่",
-    "เขาสมิง",
-    "บ่อไร่",
-    "แหลมงอบ",
-    "เกาะกูด",
-    "เกาะช้าง"
-  ]
+  // รายชื่ออำเภอจาก TRAT_TAMBONS
+  const amphoeList = Object.keys(TRAT_TAMBONS)
+  
+  // รายชื่อตำบลตามอำเภอที่เลือก
+  const getTambonList = (amphoe) => {
+    return amphoe && TRAT_TAMBONS[amphoe] ? Object.keys(TRAT_TAMBONS[amphoe]) : []
+  }
+
 
   // Validate Thai phone number (10 digits starting with 0)
   const validatePhone = (phoneNum) => {
@@ -49,32 +54,59 @@ export default function LoginPage({ onSuccess }) {
 
     try {
       if (mode === 'register') {
-        // Validate phone
+        // Validate inputs
+        if (!realName.trim()) {
+          throw new Error('กรุณาใส่ชื่อจริง')
+        }
         if (!validatePhone(phone)) {
           throw new Error('เบอร์โทรต้องมี 10 หลัก เริ่มด้วย 0')
         }
-        
-        // Register with pending approval
-        const result = register(realName, phone, district)
-        if (result.pending) {
-          setShowPending(true)
-        } else {
-          onSuccess?.()
+        if (!selectedAmphoe || !selectedTambon) {
+          throw new Error('กรุณาเลือกอำเภอและตำบล')
         }
+        
+        const district = `ต.${selectedTambon} อ.${selectedAmphoe}`
+        
+        // Register via API
+        const response = await fetch(`${API_BASE}/api/v1/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            name: realName.trim(),
+            phone,
+            district
+          })
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.message || 'ลงทะเบียนไม่สำเร็จ')
+        }
+
+        // Show pending approval
+        setPendingUser({ name: realName, phone })
+        setShowPending(true)
+        
       } else {
-        // Login - use phone as identifier
+        // Login - validate phone first
         if (!validatePhone(phone)) {
           throw new Error('เบอร์โทรต้องมี 10 หลัก เริ่มด้วย 0')
         }
         
-        const result = login(phone)
-        if (result.pending) {
+        // Use the async login from AuthContext
+        const result = await login(phone)
+        
+        if (result.success) {
+          onSuccess?.()
+        } else if (result.pending) {
           setShowPending(true)
-          throw new Error('บัญชีของคุณรออนุมัติจาก Admin')
+          setPendingUser({ phone })
         } else if (result.notFound) {
           throw new Error('ไม่พบบัญชี กรุณาสมัครสมาชิกก่อน')
         } else {
-          onSuccess?.()
+          throw new Error(result.message || 'เข้าสู่ระบบไม่สำเร็จ')
         }
       }
     } catch (err) {
@@ -94,16 +126,22 @@ export default function LoginPage({ onSuccess }) {
           </div>
           <h1 className="text-2xl font-bold text-slate-800 mb-2">รอการอนุมัติ</h1>
           <p className="text-slate-600 mb-4">
-            การสมัครของคุณกำลังรอ Admin ตรวจสอบ
+            {mode === 'register' 
+              ? 'การสมัครของคุณกำลังรอ Admin ตรวจสอบ'
+              : 'บัญชีของคุณรออนุมัติจาก Admin'}
           </p>
-          <div className="bg-slate-100 rounded-xl p-4 mb-6 text-left">
-            <p className="text-sm text-slate-600">
-              <strong>ชื่อ:</strong> {realName}
-            </p>
-            <p className="text-sm text-slate-600">
-              <strong>เบอร์โทร:</strong> {formatPhone(phone)}
-            </p>
-          </div>
+          {pendingUser && (
+            <div className="bg-slate-100 rounded-xl p-4 mb-6 text-left">
+              {pendingUser.name && (
+                <p className="text-sm text-slate-600">
+                  <strong>ชื่อ:</strong> {pendingUser.name}
+                </p>
+              )}
+              <p className="text-sm text-slate-600">
+                <strong>เบอร์โทร:</strong> {formatPhone(pendingUser.phone || phone)}
+              </p>
+            </div>
+          )}
           <p className="text-sm text-slate-500 mb-4">
             กรุณารอ Admin อนุมัติบัญชีของคุณ<br/>
             คุณจะสามารถเข้าใช้งานได้หลังจากได้รับการอนุมัติ
@@ -195,24 +233,51 @@ export default function LoginPage({ onSuccess }) {
             </p>
           </div>
 
-          {/* District - required for register */}
           {mode === 'register' && (
-            <div>
+            <div className="space-y-3">
               <label className="block text-sm font-medium text-slate-700 mb-1">
-                📍 อำเภอ/ตำบล <span className="text-red-500">*</span>
+                <MapPin className="w-4 h-4 inline mr-1" />
+                อำเภอ/ตำบล <span className="text-red-500">*</span>
               </label>
-              <select
-                value={district}
-                onChange={(e) => setDistrict(e.target.value)}
-                className="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              >
-                <option value="">-- เลือกอำเภอ --</option>
-                {TRAT_DISTRICTS.map((d) => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
-              <p className="text-xs text-slate-400 mt-1">สำหรับเจ้าหน้าที่ไปช่วยเหลือได้ง่ายขึ้น</p>
+              
+              {/* Amphoe Selection */}
+              <div className="relative">
+                <select
+                  value={selectedAmphoe}
+                  onChange={(e) => {
+                    setSelectedAmphoe(e.target.value)
+                    setSelectedTambon('')
+                  }}
+                  className="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none"
+                  required
+                >
+                  <option value="">-- เลือกอำเภอ --</option>
+                  {amphoeList.map((amphoe) => (
+                    <option key={amphoe} value={amphoe}>อ.{amphoe}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+              </div>
+              
+              {/* Tambon Selection */}
+              {selectedAmphoe && (
+                <div className="relative animate-fadeIn">
+                  <select
+                    value={selectedTambon}
+                    onChange={(e) => setSelectedTambon(e.target.value)}
+                    className="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none"
+                    required
+                  >
+                    <option value="">-- เลือกตำบล --</option>
+                    {getTambonList(selectedAmphoe).map((tambon) => (
+                      <option key={tambon} value={tambon}>ต.{tambon}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+                </div>
+              )}
+              
+              <p className="text-xs text-slate-400">สำหรับเจ้าหน้าที่ไปช่วยเหลือได้ง่ายขึ้น</p>
             </div>
           )}
 
@@ -225,7 +290,7 @@ export default function LoginPage({ onSuccess }) {
 
           <button
             type="submit"
-            disabled={loading || (mode === 'register' && (!realName.trim() || !district)) || phone.length !== 10}
+            disabled={loading || (mode === 'register' && (!realName.trim() || !selectedAmphoe || !selectedTambon)) || phone.length !== 10}
             className="w-full py-3 bg-blue-500 text-white rounded-xl font-medium flex items-center justify-center gap-2 hover:bg-blue-600 disabled:bg-slate-300 transition-colors"
           >
             {loading ? (
