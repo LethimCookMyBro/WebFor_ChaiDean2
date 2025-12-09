@@ -45,6 +45,7 @@ export default function AdminDashboard() {
   const [selectedLogs, setSelectedLogs] = useState([])
   const LOGS_PER_PAGE = 30
   const [logDeleteAmount, setLogDeleteAmount] = useState('10')
+  const [customDeleteCount, setCustomDeleteCount] = useState('')
 
   // Security State
   const [blockedIPs, setBlockedIPs] = useState([])
@@ -87,17 +88,18 @@ export default function AdminDashboard() {
     const broadcastData = JSON.parse(localStorage.getItem('adminBroadcasts') || '[]')
     setBroadcasts(broadcastData)
 
-    // 3. Fetch System Logs (Mocking local for now as full API might not be ready)
-    // In real implementation, replace with API call
+    // 3. Fetch System Logs - Just load from localStorage, no dummy creation
     const savedLogs = JSON.parse(localStorage.getItem('systemLogs') || '[]')
-    if (savedLogs.length === 0) {
-        // Init some dummy logs if empty
-        const dummyLogs = Array.from({length: 5}, (_, i) => ({
-            id: `log_${i}`, message: 'System initialized', time: new Date().toISOString()
-        }))
-        setLogs(dummyLogs)
-    } else {
-        setLogs(savedLogs)
+    setLogs(savedLogs)
+    
+    // One-time session init log (using sessionStorage to prevent duplicates)
+    const sessionKey = `admin_init_${new Date().toDateString()}`
+    if (!sessionStorage.getItem(sessionKey) && savedLogs.length === 0) {
+      sessionStorage.setItem(sessionKey, 'true')
+      const initLog = { id: `log_${Date.now()}`, message: 'System initialized', time: new Date().toISOString() }
+      const updatedLogs = [initLog]
+      localStorage.setItem('systemLogs', JSON.stringify(updatedLogs))
+      setLogs(updatedLogs)
     }
 
     // 4. Fetch Security Data
@@ -163,15 +165,19 @@ export default function AdminDashboard() {
   const handleDeleteReport = async (reportId) => {
     if (!confirm('ยืนยันลบรายงานนี้?')) return
     
-    const updated = reports.filter(r => r.id !== reportId)
-    setReports(updated)
+    // Read from localStorage directly to ensure sync
+    const currentReports = JSON.parse(localStorage.getItem('userReports') || '[]')
+    const updated = currentReports.filter(r => r.id !== reportId)
+    
+    // Save to localStorage FIRST
     localStorage.setItem('userReports', JSON.stringify(updated))
+    // Then update state
+    setReports(updated)
     
     try {
         await fetch(`${API_BASE}/api/v1/reports/${reportId}`, { method: 'DELETE' })
-        addSystemLog(`Deleted report ${reportId}`)
     } catch (e) {
-        console.error("API Error", e)
+        console.error('API Error', e)
     }
   }
 
@@ -187,17 +193,19 @@ export default function AdminDashboard() {
       // Removed log creation to prevent loop
   }
 
-  const handleBulkDeleteLogs = () => {
+  const handleBulkDeleteLogs = (countInput) => {
+      const currentLogs = JSON.parse(localStorage.getItem('systemLogs') || '[]')
       let count = 0
-      if (logDeleteAmount === 'all') count = logs.length
-      else count = parseInt(logDeleteAmount)
-
+      if (countInput === 'all') count = currentLogs.length
+      else count = Math.min(parseInt(countInput) || 0, currentLogs.length)
+      
+      if (count <= 0) return
       if (!confirm(`ยืนยันลบ Logs ${count} รายการล่าสุด?`)) return
       
-      const updated = logs.slice(count)
-      setLogs(updated)
+      const updated = currentLogs.slice(count)
       localStorage.setItem('systemLogs', JSON.stringify(updated))
-      // Removed log creation to prevent loop
+      setLogs(updated)
+      setSelectedLogs([])
   }
 
   const toggleLogSelection = (logId) => {
@@ -549,9 +557,36 @@ export default function AdminDashboard() {
                             <option value="100">100 ล่าสุด</option>
                             <option value="all">ทั้งหมด</option>
                         </select>
-                        <button onClick={handleBulkDeleteLogs} className="px-3 py-1 bg-white border hover:bg-red-50 text-red-600 rounded text-sm">ลบ</button>
+                        <button onClick={() => handleBulkDeleteLogs(logDeleteAmount)} className="px-3 py-1 bg-white border hover:bg-red-50 text-red-600 rounded text-sm">ลบ</button>
                     </div>
                     
+                    <div className="h-6 w-px bg-slate-300 mx-2 hidden sm:block"></div>
+                    
+                    {/* Custom delete input */}
+                    <div className="flex items-center gap-2">
+                        <input 
+                            type="number" 
+                            min="1" 
+                            max={logs.length}
+                            value={customDeleteCount}
+                            onChange={(e) => setCustomDeleteCount(e.target.value)}
+                            placeholder="จำนวน"
+                            className="w-20 px-2 py-1 border rounded text-sm"
+                        />
+                        <button 
+                            onClick={() => { 
+                                if (customDeleteCount && parseInt(customDeleteCount) > 0) {
+                                    handleBulkDeleteLogs(customDeleteCount)
+                                    setCustomDeleteCount('')
+                                }
+                            }}
+                            disabled={!customDeleteCount || parseInt(customDeleteCount) < 1}
+                            className="px-3 py-1 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-300 text-white rounded text-sm"
+                        >
+                            ลบ
+                        </button>
+                    </div>
+
                     <div className="h-6 w-px bg-slate-300 mx-2 hidden sm:block"></div>
 
                     <div className="flex items-center gap-2">

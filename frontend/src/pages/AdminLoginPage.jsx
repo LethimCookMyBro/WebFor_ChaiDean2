@@ -93,7 +93,7 @@ export default function AdminLoginPage({ onSuccess }) {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Superadmin"
+              placeholder=""
               className="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
               required
               autoComplete="username"
@@ -110,7 +110,7 @@ export default function AdminLoginPage({ onSuccess }) {
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••••••"
+                placeholder=""
                 className="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 pr-12"
                 required
                 autoComplete="current-password"

@@ -56,9 +56,6 @@ router.post('/', (req, res) => {
     return res.status(400).json({ error: 'Bad Request', message: 'Type required' });
   }
 
-  // Capture IP
-  const clientIP = req.clientIp || req.ip || 'unknown';
-  
   // Location string construction
   let locationStr = location || '';
   if (!locationStr && lat && lng) {
