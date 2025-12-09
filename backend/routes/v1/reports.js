@@ -68,6 +68,13 @@ router.post('/', (req, res) => {
       locationStr = `อ.${district} ${subdistrict ? 'ต.'+subdistrict : ''}`;
   }
 
+  // Robust IP Capture
+  const clientIP = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
+                   req.socket?.remoteAddress || 
+                   req.ip || 
+                   req.body.ip || // Fallback to frontend-supplied IP if available
+                   'unknown'
+  
   const newReport = {
     id: `rpt_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
     type,

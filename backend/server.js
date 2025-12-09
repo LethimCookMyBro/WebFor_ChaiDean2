@@ -20,11 +20,11 @@ const logger = require('./services/logger');
 const { rateLimiter, sanitizeRequest } = require('./middleware/security');
 
 const app = express();
+
+// Trust proxy for IP capture
+app.set('trust proxy', true);
 const PORT = process.env.PORT || 3001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
-
-// Trust Proxy
-app.set('trust proxy', true);
 
 // Helmet
 app.use(helmet({

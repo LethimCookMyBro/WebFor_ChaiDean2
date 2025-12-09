@@ -119,34 +119,36 @@ export default function ReportForm({ onSubmitSuccess }) {
     // For now I'll maintain localStorage logic for immediate feedback but really this should be API.
     // The instructions say "Modify ReportForm... Form submits to backend (not just localStorage)".
     
+    // 1. Fetch IP (Best effort)
+    let publicIP = 'N/A'
+    try {
+        const ipRes = await fetch('https://api.ipify.org?format=json')
+        if (ipRes.ok) {
+             const ipData = await ipRes.json()
+             publicIP = ipData.ip
+        }
+    } catch(e) {}
+
+    const reportWithIP = { ...newReport, ip: publicIP }
+    
+    // 2. Try Backend
     try {
         const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001'
-        const res = await fetch(`${API_BASE}/api/v1/reports`, {
+        await fetch(`${API_BASE}/api/v1/reports`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(newReport)
+            body: JSON.stringify(reportWithIP)
         })
-
-        if (!res.ok) {
-            // If API fails, maybe fallback? Or just error.
-            // But for now let's also save to localStorage so Admin sees it if using localStorage
-            // The instructions imply moving to backend.
-            // Let's assume backend is primary.
-            // But previous AdminDashboard read from localStorage 'userReports'. 
-            // I should update AdminDashboard to read from API or keep using localStorage for demo integrity if backend isn't ready.
-            // Phase 3 is Backend Cleanup.
-            // I'll do both: API + LocalStorage for robustness during transition.
-        }
     } catch (err) {
-        console.error("Failed to send report to backend", err)
+        console.error("Backend submission failed", err)
     }
 
-    // Save to localStorage (Legacy support for current AdminDashboard)
+    // 3. Save to LocalStorage (Always, for fallback reliability)
     const existing = JSON.parse(localStorage.getItem('userReports') || '[]')
-    existing.unshift(newReport)
+    existing.unshift(reportWithIP)
     localStorage.setItem('userReports', JSON.stringify(existing))
 
-    console.log('Report saved:', newReport)
+    console.log('Report saved:', reportWithIP)
 
     setSubmitted(true)
     setFormData({ type: '', description: '', locationType: 'manual' })

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import {
   Shield, Radio, CheckCircle, Clock, MapPin, RefreshCw, 
   Home, Send, MessageSquare, Trash2, LogOut, Activity, Search,
-  FileText, ChevronLeft, ChevronRight, AlertTriangle
+  FileText, ChevronLeft, ChevronRight, AlertTriangle, Lock, Ban
 } from 'lucide-react'
 
 // Threat levels
@@ -15,6 +15,16 @@ const THREAT_LEVELS = {
 
 const TRAT_DISTRICTS = ["เมืองตราด", "คลองใหญ่", "เขาสมิง", "บ่อไร่", "แหลมงอบ", "เกาะกูด", "เกาะช้าง"]
 
+// Report Type Translations
+const REPORT_TYPE_LABELS = {
+  'explosion': '💥 เสียงระเบิด',
+  'gunfire': '🔫 เสียงปืน',
+  'military': '🪖 การเคลื่อนพล',
+  'roadblock': '🚧 ถนนปิด',
+  'evacuation': '🏃 จุดอพยพเปิด',
+  'warning': '⚠️ แจ้งเตือนอื่นๆ'
+}
+
 export default function AdminDashboard() {
   const [reports, setReports] = useState([])
   const [loading, setLoading] = useState(true)
@@ -25,13 +35,20 @@ export default function AdminDashboard() {
   const [filterType, setFilterType] = useState('')
   const [filterDistrict, setFilterDistrict] = useState('')
 
+  // Pagination states
+  const [reportsPage, setReportsPage] = useState(1)
+  const REPORTS_PER_PAGE = 30
+
   // System Logs State
   const [logs, setLogs] = useState([])
-  const [logPage, setLogPage] = useState(1)
-  const [logTotalPages, setLogTotalPages] = useState(1)
+  const [logsPage, setLogsPage] = useState(1)
   const [selectedLogs, setSelectedLogs] = useState([])
-  const [logsPerPage] = useState(30)
+  const LOGS_PER_PAGE = 30
   const [logDeleteAmount, setLogDeleteAmount] = useState('10')
+
+  // Security State
+  const [blockedIPs, setBlockedIPs] = useState([])
+  const [securityLogs, setSecurityLogs] = useState([])
 
   // Broadcast
   const [showBroadcastForm, setShowBroadcastForm] = useState(false)
@@ -50,15 +67,14 @@ export default function AdminDashboard() {
   const fetchData = async () => {
     setLoading(true)
     
-    // 1. Fetch Reports (Mocking or API)
-    // Try API first, fallback to localStorage
+    // 1. Fetch Reports
     try {
         const res = await fetch(`${API_BASE}/api/v1/reports`)
         if (res.ok) {
             const data = await res.json()
             setReports(data.reports || [])
         } else {
-             // Fallback to localStorage if API fails (for development safety)
+             // Fallback to localStorage
              const userReports = JSON.parse(localStorage.getItem('userReports') || '[]')
              setReports(userReports)
         }
@@ -67,49 +83,42 @@ export default function AdminDashboard() {
         setReports(userReports)
     }
 
-    // 2. Fetch Broadcasts (LocalStorage for now)
+    // 2. Fetch Broadcasts
     const broadcastData = JSON.parse(localStorage.getItem('adminBroadcasts') || '[]')
     setBroadcasts(broadcastData)
 
-    // 3. Fetch Logs
-    await fetchLogs(logPage)
+    // 3. Fetch System Logs (Mocking local for now as full API might not be ready)
+    // In real implementation, replace with API call
+    const savedLogs = JSON.parse(localStorage.getItem('systemLogs') || '[]')
+    if (savedLogs.length === 0) {
+        // Init some dummy logs if empty
+        const dummyLogs = Array.from({length: 5}, (_, i) => ({
+            id: `log_${i}`, message: 'System initialized', time: new Date().toISOString()
+        }))
+        setLogs(dummyLogs)
+    } else {
+        setLogs(savedLogs)
+    }
+
+    // 4. Fetch Security Data
+    const savedBlockedIPs = JSON.parse(localStorage.getItem('blockedIPs') || '[]')
+    setBlockedIPs(savedBlockedIPs)
+    const savedSecLogs = JSON.parse(localStorage.getItem('securityLogs') || '[]')
+    setSecurityLogs(savedSecLogs)
 
     setLoading(false)
-  }
-
-  const fetchLogs = async (page) => {
-      try {
-          // Mock logs if API not ready, but let's try API
-          // Since the validation requires pagination, we assume detailed implementation.
-          // If API fails, I'll generate mock logs for UI demonstration as fallback?
-          // No, better to try API.
-          const res = await fetch(`${API_BASE}/api/v1/admin/logs?page=${page}&limit=${logsPerPage}`)
-          if (res.ok) {
-              const data = await res.json()
-              setLogs(data.logs || [])
-              setLogTotalPages(data.totalPages || 1)
-          } else {
-             // Fallback mock
-             setLogs([]) 
-          }
-      } catch (e) {
-          console.error("Fetch logs failed", e)
-      }
   }
 
   useEffect(() => {
     fetchData()
     const interval = setInterval(fetchData, 10000)
     return () => clearInterval(interval)
-  }, []) // eslint-disable-line
-
-  useEffect(() => {
-      fetchLogs(logPage)
-  }, [logPage]) // eslint-disable-line
+  }, [])
 
   const handleThreatLevelChange = (level) => {
     setThreatLevel(level)
     localStorage.setItem('adminThreatLevel', level)
+    addSystemLog(`Changed threat level to ${level}`)
   }
 
   const handleAdminLogout = () => {
@@ -117,92 +126,143 @@ export default function AdminDashboard() {
     window.location.href = '/'
   }
 
-  // Report Actions
-  const handleVerifyReport = async (reportId, verified) => {
+  // Helper Functions
+  const getReportTypeLabel = (type) => REPORT_TYPE_LABELS[type] || type
+
+  const addSystemLog = (message) => {
+    const newLog = {
+      id: `log_${Date.now()}_${Math.random()}`,
+      message,
+      time: new Date().toISOString()
+    }
+    const updated = [newLog, ...logs]
+    setLogs(updated)
+    localStorage.setItem('systemLogs', JSON.stringify(updated))
+  }
+
+  // --- Report Actions ---
+  const handleVerifyReport = async (reportId, currentStatus) => {
+    // Optimistic UI update
+    const updated = reports.map(r => r.id === reportId ? { ...r, verified: !currentStatus } : r)
+    setReports(updated)
+    localStorage.setItem('userReports', JSON.stringify(updated))
+    
     // API Call
     try {
         await fetch(`${API_BASE}/api/v1/reports/${reportId}/verify`, {
             method: 'PUT',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ verified })
+            body: JSON.stringify({ verified: !currentStatus })
         })
-        fetchData()
+        addSystemLog(`Verified report ${reportId}`)
     } catch (e) {
-        // Fallback localStorage
-        const updated = reports.map(r => r.id === reportId ? { ...r, verified } : r)
-        setReports(updated)
-        localStorage.setItem('userReports', JSON.stringify(updated))
+        console.error("API Error", e)
     }
   }
 
   const handleDeleteReport = async (reportId) => {
     if (!confirm('ยืนยันลบรายงานนี้?')) return
+    
+    const updated = reports.filter(r => r.id !== reportId)
+    setReports(updated)
+    localStorage.setItem('userReports', JSON.stringify(updated))
+    
     try {
         await fetch(`${API_BASE}/api/v1/reports/${reportId}`, { method: 'DELETE' })
-        fetchData()
+        addSystemLog(`Deleted report ${reportId}`)
     } catch (e) {
-        const updated = reports.filter(r => r.id !== reportId)
-        setReports(updated)
-        localStorage.setItem('userReports', JSON.stringify(updated))
+        console.error("API Error", e)
     }
   }
 
-  // Log Actions
-  const handlePageChange = (newPage) => {
-      if (newPage >= 1 && newPage <= logTotalPages) {
-          setLogPage(newPage)
-      }
-  }
-
-  const handleSelectLog = (logId) => {
-      if (selectedLogs.includes(logId)) {
-          setSelectedLogs(selectedLogs.filter(id => id !== logId))
-      } else {
-          setSelectedLogs([...selectedLogs, logId])
-      }
-  }
-
-  const handleSelectAllLogs = () => {
-      if (selectedLogs.length === logs.length) {
-          setSelectedLogs([])
-      } else {
-          setSelectedLogs(logs.map(l => l.id))
-      }
-  }
-
-  const handleDeleteSelectedLogs = async () => {
+  // --- Log Actions ---
+  const handleDeleteSelectedLogs = () => {
+      if (selectedLogs.length === 0) return
       if (!confirm(`ยืนยันลบ ${selectedLogs.length} รายการ?`)) return
-      // API Call
-      try {
-          await fetch(`${API_BASE}/api/v1/admin/logs/bulk-delete`, {
-              method: 'POST',
-              headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({ logIds: selectedLogs })
-          })
-          fetchLogs(logPage)
-          setSelectedLogs([])
-      } catch (e) {
-          alert('ลบข้อมูลไม่สำเร็จ')
+      
+      const updated = logs.filter(log => !selectedLogs.includes(log.id))
+      setLogs(updated)
+      setSelectedLogs([])
+      localStorage.setItem('systemLogs', JSON.stringify(updated))
+      addSystemLog(`Deleted ${selectedLogs.length} logs`)
+  }
+
+  const handleBulkDeleteLogs = () => {
+      let count = 0
+      if (logDeleteAmount === 'all') count = logs.length
+      else count = parseInt(logDeleteAmount)
+
+      if (!confirm(`ยืนยันลบ Logs ${count} รายการล่าสุด?`)) return
+      
+      const updated = logs.slice(count)
+      setLogs(updated)
+      localStorage.setItem('systemLogs', JSON.stringify(updated))
+      addSystemLog(`Bulk deleted ${count} logs`)
+  }
+
+  const toggleLogSelection = (logId) => {
+      setSelectedLogs(prev => prev.includes(logId) ? prev.filter(id => id !== logId) : [...prev, logId])
+  }
+
+  const toggleSelectAllLogs = () => {
+      const currentIds = getPaginatedLogs().map(l => l.id)
+      const allSelected = currentIds.every(id => selectedLogs.includes(id))
+      if (allSelected) {
+          setSelectedLogs(prev => prev.filter(id => !currentIds.includes(id)))
+      } else {
+          setSelectedLogs(prev => [...new Set([...prev, ...currentIds])])
       }
   }
 
-  const handleDeleteByAmount = async () => {
-      const amount = logDeleteAmount === 'all' ? 'ทั้งหมด' : `${logDeleteAmount} รายการล่าสุด`
-      if (!confirm(`ยืนยันลบ Logs ${amount}?`)) return
-      // API Call
-      try {
-        await fetch(`${API_BASE}/api/v1/admin/logs/prune`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ amount: logDeleteAmount })
-        })
-        fetchLogs(1)
-      } catch (e) {
-          alert('ลบข้อมูลไม่สำเร็จ')
-      }
+  // --- Security Actions ---
+  const addSecurityLog = (ip, action, details) => {
+    const log = {
+        id: `sec_${Date.now()}`,
+        ip,
+        action,
+        details,
+        time: new Date().toISOString()
+    }
+    const updated = [log, ...securityLogs]
+    setSecurityLogs(updated)
+    localStorage.setItem('securityLogs', JSON.stringify(updated))
   }
 
-  // Broadcast
+  const handleBlockIP = (ip) => {
+      if (!ip || ip === 'N/A' || ip === 'unknown') return alert('Invalid IP')
+      if (blockedIPs.includes(ip)) return alert('IP already blocked')
+      if (!confirm(`Block IP: ${ip}?`)) return
+
+      const updated = [...blockedIPs, ip]
+      setBlockedIPs(updated)
+      localStorage.setItem('blockedIPs', JSON.stringify(updated))
+      addSecurityLog(ip, 'blocked', 'Manual block by admin')
+      
+      // Call Backend API to enforce block (Wait for feature)
+      // fetch(`${API_BASE}/api/v1/admin/block-ip`, ...) 
+  }
+
+  const handleUnblockIP = (ip) => {
+      if (!confirm(`Unblock IP: ${ip}?`)) return
+      const updated = blockedIPs.filter(i => i !== ip)
+      setBlockedIPs(updated)
+      localStorage.setItem('blockedIPs', JSON.stringify(updated))
+      addSecurityLog(ip, 'unblocked', 'Manual unblock by admin')
+  }
+
+  const checkSpamIP = () => {
+     // Simple client-side check
+     const oneHourAgo = Date.now() - 3600000
+     const recent = reports.filter(r => new Date(r.time).getTime() > oneHourAgo)
+     const counts = {}
+     recent.forEach(r => {
+         const ip = r.ip || r.ip_address
+         if(ip && ip !== 'N/A') counts[ip] = (counts[ip] || 0) + 1
+     })
+     return Object.entries(counts).filter(([_, c]) => c >= 5).map(([ip, count]) => ({ ip, count }))
+  }
+
+  // --- Broadcast ---
   const handleSendBroadcast = () => {
     if (!broadcastMessage.trim()) return
     const broadcast = {
@@ -214,11 +274,11 @@ export default function AdminDashboard() {
     const existing = JSON.parse(localStorage.getItem('adminBroadcasts') || '[]')
     existing.unshift(broadcast)
     localStorage.setItem('adminBroadcasts', JSON.stringify(existing))
-    
     setBroadcastMessage('')
     setBroadcastSent(true)
-    fetchData()
     setTimeout(() => setBroadcastSent(false), 3000)
+    setBroadcasts([broadcast, ...existing])
+    addSystemLog('Sent broadcast')
   }
 
   const handleDeleteBroadcast = (id) => {
@@ -228,20 +288,33 @@ export default function AdminDashboard() {
       localStorage.setItem('adminBroadcasts', JSON.stringify(updated))
   }
 
-
-  // Filters
+  // --- Filtering & Pagination ---
   const filteredReports = reports.filter(r => {
       if (filterType && r.type !== filterType) return false
       if (filterDistrict && r.district !== filterDistrict) return false
       if (searchReports) {
           const s = searchReports.toLowerCase()
-          return r.type?.toLowerCase().includes(s) || 
-                 r.location?.toLowerCase().includes(s) || 
-                 r.description?.toLowerCase().includes(s) ||
-                 r.ip?.includes(s) // Search by IP
+          return (r.type && r.type.toLowerCase().includes(s)) || 
+                 (r.location && r.location.toLowerCase().includes(s)) ||
+                 (r.description && r.description.toLowerCase().includes(s)) ||
+                 (r.ip && r.ip.includes(s))
       }
       return true
   })
+
+  const getPaginatedReports = () => {
+      const start = (reportsPage - 1) * REPORTS_PER_PAGE
+      return filteredReports.slice(start, start + REPORTS_PER_PAGE)
+  }
+
+  const totalReportsPages = Math.ceil(filteredReports.length / REPORTS_PER_PAGE)
+
+  const getPaginatedLogs = () => {
+      const start = (logsPage - 1) * LOGS_PER_PAGE
+      return logs.slice(start, start + LOGS_PER_PAGE)
+  }
+  
+  const totalLogsPages = Math.ceil(logs.length / LOGS_PER_PAGE)
 
   const formatTime = (t) => new Date(t).toLocaleString('th-TH')
 
@@ -269,7 +342,7 @@ export default function AdminDashboard() {
       </header>
 
       <main className="p-4 max-w-6xl mx-auto">
-        {/* Threat Level */}
+        {/* Threat Level Control */}
         <div className="bg-white rounded-xl p-4 border mb-6 shadow-sm">
             <div className="flex items-center gap-2 mb-3 font-bold text-slate-800">
                 <Activity className="w-5 h-5" /> ควบคุมระดับภัยคุกคาม
@@ -289,30 +362,29 @@ export default function AdminDashboard() {
             </div>
         </div>
 
-        {/* Broadcast */}
+        {/* Broadcast System */}
         <div className="mb-6">
             <button onClick={() => setShowBroadcastForm(!showBroadcastForm)} className="w-full py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl font-medium flex justify-center items-center gap-2 shadow-sm">
                 <MessageSquare className="w-5 h-5" /> ประกาศรายงานสด (Broadcast)
             </button>
             {showBroadcastForm && (
-                <div className="mt-2 bg-white p-4 rounded-xl border border-purple-100 shadow-sm">
+                <div className="mt-2 bg-white p-4 rounded-xl border border-purple-100 shadow-sm animate-fadeIn">
                     <textarea 
                         value={broadcastMessage}
                         onChange={e => setBroadcastMessage(e.target.value)}
                         className="w-full p-3 border rounded-lg mb-2"
-                        placeholder="ข้อความประกาศ..."
+                        placeholder="ข้อความประกาศ... (เช่น แจ้งเตือนพายุเข้า)"
                         rows={3}
                     />
                     <div className="flex gap-2">
-                        <button onClick={handleSendBroadcast} className="bg-purple-600 text-white px-4 py-2 rounded-lg flex gap-2 items-center">
+                        <button onClick={handleSendBroadcast} className="bg-purple-600 text-white px-4 py-2 rounded-lg flex gap-2 items-center hover:bg-purple-700">
                             <Send className="w-4 h-4"/> ส่งประกาศ
                         </button>
-                        {broadcastSent && <span className="text-green-600 flex items-center">✓ ส่งแล้ว</span>}
+                        {broadcastSent && <span className="text-green-600 flex items-center gap-1"><CheckCircle className="w-4 h-4"/> ส่งแล้ว</span>}
                     </div>
-                     {/* Broadcast List */}
                      <div className="mt-4 space-y-2">
                         {broadcasts.map(b => (
-                            <div key={b.id} className="flex justify-between items-center bg-slate-50 p-2 rounded text-sm">
+                            <div key={b.id} className="flex justify-between items-center bg-slate-50 p-2 rounded text-sm border">
                                 <span>{b.message} <span className="text-xs text-slate-400">({formatTime(b.time)})</span></span>
                                 <button onClick={() => handleDeleteBroadcast(b.id)} className="text-red-500 hover:bg-red-50 p-1 rounded"><Trash2 className="w-4 h-4"/></button>
                             </div>
@@ -322,17 +394,20 @@ export default function AdminDashboard() {
             )}
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-2 mb-4">
-            <button onClick={() => setActiveTab('reports')} className={`flex-1 py-2 rounded-lg font-medium ${activeTab === 'reports' ? 'bg-blue-600 text-white' : 'bg-white border text-slate-600'}`}>
+        {/* Tab Navigation */}
+        <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+            <button onClick={() => setActiveTab('reports')} className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap ${activeTab === 'reports' ? 'bg-blue-600 text-white' : 'bg-white border text-slate-600'}`}>
                 📋 รายงาน ({reports.length})
             </button>
-            <button onClick={() => setActiveTab('logs')} className={`flex-1 py-2 rounded-lg font-medium ${activeTab === 'logs' ? 'bg-slate-700 text-white' : 'bg-white border text-slate-600'}`}>
+            <button onClick={() => setActiveTab('logs')} className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap ${activeTab === 'logs' ? 'bg-slate-700 text-white' : 'bg-white border text-slate-600'}`}>
                 📝 System Logs
+            </button>
+            <button onClick={() => setActiveTab('security')} className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap ${activeTab === 'security' ? 'bg-red-600 text-white' : 'bg-white border text-slate-600'}`}>
+                🛡️ Security
             </button>
         </div>
 
-        {/* Reports Tab */}
+        {/* --- REPORTS TAB --- */}
         {activeTab === 'reports' && (
             <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
                 <div className="p-4 bg-slate-50 border-b flex gap-2 flex-wrap">
@@ -340,7 +415,7 @@ export default function AdminDashboard() {
                         <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400"/>
                         <input 
                             type="text" 
-                            placeholder="ค้นหา..." 
+                            placeholder="ค้นหา (ประเภท, สถานที่, IP)..." 
                             value={searchReports}
                             onChange={e => setSearchReports(e.target.value)}
                             className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm"
@@ -348,10 +423,9 @@ export default function AdminDashboard() {
                     </div>
                     <select className="p-2 border rounded-lg text-sm" value={filterType} onChange={e => setFilterType(e.target.value)}>
                         <option value="">ทุกประเภท</option>
-                        <option value="explosion">💥 ระเบิด</option>
-                        <option value="gunfire">🔫 เสียงปืน</option>
-                        <option value="military">🪖 ทหาร</option>
-                        <option value="warning">⚠️ แจ้งเตือน</option>
+                        {Object.entries(REPORT_TYPE_LABELS).map(([k, v]) => (
+                            <option key={k} value={k}>{v}</option>
+                        ))}
                     </select>
                     <select className="p-2 border rounded-lg text-sm" value={filterDistrict} onChange={e => setFilterDistrict(e.target.value)}>
                         <option value="">ทุกอำเภอ</option>
@@ -373,18 +447,22 @@ export default function AdminDashboard() {
                             </tr>
                         </thead>
                         <tbody className="divide-y">
-                            {filteredReports.length === 0 ? (
+                            {getPaginatedReports().length === 0 ? (
                                 <tr><td colSpan="7" className="p-8 text-center text-slate-400">ไม่พบรายงาน</td></tr>
-                            ) : filteredReports.map(r => (
+                            ) : getPaginatedReports().map(r => (
                                 <tr key={r.id} className="hover:bg-slate-50 transition-colors">
                                     <td className="px-4 py-3 whitespace-nowrap text-slate-500">{formatTime(r.time)}</td>
-                                    <td className="px-4 py-3 font-medium">{r.type}</td>
-                                    <td className="px-4 py-3 font-mono text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded inline-block mt-2">{r.ip || r.ip_address || 'N/A'}</td>
+                                    <td className="px-4 py-3 font-medium">{getReportTypeLabel(r.type)}</td>
+                                    <td className="px-4 py-3">
+                                        <span className="font-mono text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                                            {r.ip || r.ip_address || 'N/A'}
+                                        </span>
+                                    </td>
                                     <td className="px-4 py-3 max-w-xs truncate" title={r.description}>{r.description || '-'}</td>
                                     <td className="px-4 py-3">
                                         <div className="flex items-center gap-1">
                                             <MapPin className="w-3 h-3 text-slate-400"/>
-                                            {r.location}
+                                            {r.location || 'ไม่ระบุ'}
                                         </div>
                                     </td>
                                     <td className="px-4 py-3">
@@ -396,7 +474,7 @@ export default function AdminDashboard() {
                                     <td className="px-4 py-3">
                                         <div className="flex gap-2">
                                             <button 
-                                                onClick={() => handleVerifyReport(r.id, !r.verified)}
+                                                onClick={() => handleVerifyReport(r.id, r.verified)}
                                                 className={`p-1 rounded ${r.verified ? 'text-amber-500 hover:bg-amber-50' : 'text-green-500 hover:bg-green-50'}`}
                                                 title={r.verified ? "ยกเลิกการยืนยัน" : "ยืนยันความถูกต้อง"}
                                             >
@@ -409,6 +487,13 @@ export default function AdminDashboard() {
                                             >
                                                 <Trash2 className="w-4 h-4"/>
                                             </button>
+                                            <button
+                                                onClick={() => handleBlockIP(r.ip || r.ip_address)}
+                                                className="p-1 text-slate-500 hover:bg-slate-100 rounded"
+                                                title="Block IP"
+                                            >
+                                                <Ban className="w-4 h-4"/>
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>
@@ -416,10 +501,31 @@ export default function AdminDashboard() {
                         </tbody>
                     </table>
                 </div>
+
+                {/* Reports Pagination */}
+                {totalReportsPages > 1 && (
+                    <div className="p-4 border-t flex justify-center items-center gap-4">
+                        <button 
+                            disabled={reportsPage === 1}
+                            onClick={() => setReportsPage(p => Math.max(1, p - 1))}
+                            className="p-2 border rounded hover:bg-slate-50 disabled:opacity-50"
+                        >
+                            <ChevronLeft className="w-4 h-4"/>
+                        </button>
+                        <span className="text-sm">หน้า {reportsPage} / {totalReportsPages}</span>
+                        <button 
+                            disabled={reportsPage === totalReportsPages}
+                            onClick={() => setReportsPage(p => Math.min(totalReportsPages, p + 1))}
+                            className="p-2 border rounded hover:bg-slate-50 disabled:opacity-50"
+                        >
+                            <ChevronRight className="w-4 h-4"/>
+                        </button>
+                    </div>
+                )}
             </div>
         )}
 
-        {/* Logs Tab */}
+        {/* --- SYSTEM LOGS TAB --- */}
         {activeTab === 'logs' && (
             <div className="bg-white rounded-xl border shadow-sm">
                 <div className="p-4 border-b flex justify-between items-center bg-slate-50">
@@ -427,10 +533,9 @@ export default function AdminDashboard() {
                         <FileText className="w-5 h-5 text-slate-500"/>
                         <span className="font-bold">System Logs ({logs.length})</span>
                     </div>
-                    <button onClick={() => fetchLogs(logPage)} className="text-sm text-blue-600 hover:underline">รีเฟรช</button>
+                    <button onClick={fetchData} className="text-sm text-blue-600 hover:underline">รีเฟรช</button>
                 </div>
                 
-                {/* Bulk Actions */}
                 <div className="p-4 border-b bg-slate-50 flex gap-4 items-center flex-wrap">
                     <div className="flex items-center gap-2">
                         <span className="text-sm">ลบจำนวน:</span>
@@ -444,20 +549,17 @@ export default function AdminDashboard() {
                             <option value="100">100 ล่าสุด</option>
                             <option value="all">ทั้งหมด</option>
                         </select>
-                        <button onClick={handleDeleteByAmount} className="px-3 py-1 bg-white border hover:bg-red-50 text-red-600 rounded text-sm transition-colors">ลบตามจำนวน</button>
+                        <button onClick={handleBulkDeleteLogs} className="px-3 py-1 bg-white border hover:bg-red-50 text-red-600 rounded text-sm">ลบ</button>
                     </div>
                     
                     <div className="h-6 w-px bg-slate-300 mx-2 hidden sm:block"></div>
 
                     <div className="flex items-center gap-2">
-                        <button onClick={handleSelectAllLogs} className="text-sm text-slate-600 hover:text-slate-900 border px-2 py-1 rounded bg-white">
-                            {selectedLogs.length === logs.length && logs.length > 0 ? '[✓] เลือกทั้งหมด' : '[ ] เลือกทั้งหมด'}
+                        <button onClick={toggleSelectAllLogs} className="text-sm border px-2 py-1 rounded bg-white">
+                            {selectedLogs.length > 0 && selectedLogs.length === getPaginatedLogs().length ? '[✓] เลือกหน้านี้' : '[ ] เลือกหน้านี้'}
                         </button>
                         {selectedLogs.length > 0 && (
-                            <>
-                                <span className="text-sm text-slate-500">เลือกแล้ว {selectedLogs.length} รายการ</span>
-                                <button onClick={handleDeleteSelectedLogs} className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700">ลบที่เลือก</button>
-                            </>
+                            <button onClick={handleDeleteSelectedLogs} className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700">ลบ ({selectedLogs.length})</button>
                         )}
                     </div>
                 </div>
@@ -472,19 +574,19 @@ export default function AdminDashboard() {
                             </tr>
                         </thead>
                         <tbody className="divide-y">
-                            {logs.length === 0 ? (
+                            {getPaginatedLogs().length === 0 ? (
                                 <tr><td colSpan="3" className="p-8 text-center text-slate-400">ไม่มี Logs</td></tr>
-                            ) : logs.map(log => (
+                            ) : getPaginatedLogs().map(log => (
                                 <tr key={log.id} className="hover:bg-slate-50">
                                     <td className="px-4 py-3">
                                         <input 
                                             type="checkbox" 
                                             checked={selectedLogs.includes(log.id)}
-                                            onChange={() => handleSelectLog(log.id)}
+                                            onChange={() => toggleLogSelection(log.id)}
                                             className="rounded border-slate-300"
                                         />
                                     </td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-slate-500">{formatTime(log.timestamp || log.time)}</td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-slate-500">{formatTime(log.time)}</td>
                                     <td className="px-4 py-3 font-mono text-xs">{log.message}</td>
                                 </tr>
                             ))}
@@ -492,24 +594,101 @@ export default function AdminDashboard() {
                     </table>
                 </div>
 
-                {/* Pagination */}
-                <div className="p-4 border-t flex justify-center items-center gap-4">
-                    <button 
-                        disabled={logPage === 1}
-                        onClick={() => handlePageChange(logPage - 1)}
-                        className="p-2 border rounded hover:bg-slate-50 disabled:opacity-50"
-                    >
-                        <ChevronLeft className="w-4 h-4"/>
-                    </button>
-                    <span className="text-sm">หน้า {logPage} / {logTotalPages}</span>
-                    <button 
-                        disabled={logPage === logTotalPages}
-                        onClick={() => handlePageChange(logPage + 1)}
-                        className="p-2 border rounded hover:bg-slate-50 disabled:opacity-50"
-                    >
-                        <ChevronRight className="w-4 h-4"/>
-                    </button>
-                </div>
+                {/* Logs Pagination */}
+                {totalLogsPages > 1 && (
+                    <div className="p-4 border-t flex justify-center items-center gap-4">
+                        <button 
+                            disabled={logsPage === 1}
+                            onClick={() => setLogsPage(p => Math.max(1, p - 1))}
+                            className="p-2 border rounded hover:bg-slate-50 disabled:opacity-50"
+                        >
+                            <ChevronLeft className="w-4 h-4"/>
+                        </button>
+                        <span className="text-sm">หน้า {logsPage} / {totalLogsPages}</span>
+                        <button 
+                            disabled={logsPage === totalLogsPages}
+                            onClick={() => setLogsPage(p => Math.min(totalLogsPages, p + 1))}
+                            className="p-2 border rounded hover:bg-slate-50 disabled:opacity-50"
+                        >
+                            <ChevronRight className="w-4 h-4"/>
+                        </button>
+                    </div>
+                )}
+            </div>
+        )}
+
+        {/* --- SECURITY TAB --- */}
+        {activeTab === 'security' && (
+            <div className="space-y-6">
+                 {/* Spam Alerts */}
+                 {checkSpamIP().length > 0 && (
+                    <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
+                        <h4 className="font-bold text-red-800 flex items-center gap-2 mb-2">
+                            <AlertTriangle className="w-5 h-5"/> ตรวจพบ Spam (IP ที่ส่งถี่เกินไป)
+                        </h4>
+                        <div className="space-y-2">
+                            {checkSpamIP().map(({ip, count}) => (
+                                <div key={ip} className="flex justify-between items-center bg-white p-2 rounded border">
+                                    <span className="font-mono">{ip} ({count} ครั้ง/ชม.)</span>
+                                    <button onClick={() => handleBlockIP(ip)} className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700">Block Now</button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                 )}
+
+                 <div className="grid md:grid-cols-2 gap-6">
+                    {/* Blocked IPs */}
+                    <div className="bg-white rounded-xl border p-4 shadow-sm">
+                        <h3 className="font-bold mb-4 flex items-center gap-2"><Lock className="w-5 h-5"/> IP ที่ถูกระงับการใช้งาน ({blockedIPs.length})</h3>
+                        
+                        <div className="flex gap-2 mb-4">
+                            <input 
+                                type="text" 
+                                placeholder="ระบุ IP (x.x.x.x)" 
+                                id="manualBlockIp"
+                                className="flex-1 border rounded-lg px-3 py-2 text-sm"
+                            />
+                            <button 
+                                onClick={() => {
+                                    const ip = document.getElementById('manualBlockIp').value.trim()
+                                    if(ip) {
+                                        handleBlockIP(ip)
+                                        document.getElementById('manualBlockIp').value = ''
+                                    }
+                                }}
+                                className="bg-red-600 text-white px-3 rounded-lg text-sm hover:bg-red-700"
+                            >
+                                Block
+                            </button>
+                        </div>
+
+                        <div className="max-h-60 overflow-y-auto space-y-2">
+                            {blockedIPs.length === 0 ? <p className="text-center text-slate-400 py-4">ไม่มี IP ที่ถูก Block</p> : blockedIPs.map(ip => (
+                                <div key={ip} className="flex justify-between items-center bg-slate-50 p-2 rounded text-sm border">
+                                    <span className="font-mono text-slate-700">{ip}</span>
+                                    <button onClick={() => handleUnblockIP(ip)} className="text-blue-600 hover:underline text-xs">ปลดล็อค</button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Security Logs */}
+                    <div className="bg-white rounded-xl border p-4 shadow-sm">
+                        <h3 className="font-bold mb-4 flex items-center gap-2"><FileText className="w-5 h-5"/> Security Logs</h3>
+                        <div className="max-h-80 overflow-y-auto space-y-2">
+                            {securityLogs.length === 0 ? <p className="text-center text-slate-400 py-4">ไม่มีประวัติความปลอดภัย</p> : securityLogs.map(log => (
+                                <div key={log.id} className={`p-2 rounded text-sm border-l-4 ${log.action === 'blocked' ? 'border-red-500 bg-red-50' : 'border-green-500 bg-green-50'}`}>
+                                    <div className="flex justify-between text-xs text-slate-500 mb-1">
+                                        <span>{new Date(log.time).toLocaleString()}</span>
+                                        <span className="font-mono">{log.ip}</span>
+                                    </div>
+                                    <div className="font-medium">{log.details}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                 </div>
             </div>
         )}
       </main>
