@@ -6,6 +6,7 @@ const helmet = require('helmet');
 const requestIp = require('request-ip');
 const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
+const path = require('path'); // [เพิ่มใหม่] เรียกใช้ module path
 
 // Routes
 const locateRoutes = require('./routes/v1/locate');
@@ -126,14 +127,18 @@ app.use('/api/v1/geo', rateLimiter, geoRoutes);
 app.use('/api/v1/reports', rateLimiter, reportsRoutes);
 app.use('/api/v1/admin', rateLimiter, adminRoutes);
 
-// Root
-app.get('/', (req, res) => {
-  res.json({
-    status: 'operational',
-    service: 'Border Safety API',
-    version: '2.4',
-    storage: 'SQLite (persistent)'
-  });
+// ============================================
+// Frontend Serving Logic (แก้ไขใหม่)
+// ============================================
+
+// 1. Serve static files from the 'public' directory
+// (Folder 'public' will be created by Dockerfile from frontend build)
+app.use(express.static(path.join(__dirname, 'public')));
+
+// 2. Handle React Routing (SPA fallback)
+// If request doesn't match any API route or static file, send index.html
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Error Handler
@@ -153,4 +158,3 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
-
