@@ -6,7 +6,7 @@ const helmet = require('helmet');
 const requestIp = require('request-ip');
 const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
-const path = require('path'); // [เพิ่มใหม่] เรียกใช้ module path
+const path = require('path'); // [แก้ไข 1] เรียกใช้ module path
 
 // Routes
 const locateRoutes = require('./routes/v1/locate');
@@ -56,6 +56,10 @@ const allowedOrigins = [
   'http://127.0.0.1:5173', 'http://127.0.0.1:5174',
   process.env.FRONTEND_URL
 ].filter(Boolean);
+
+// V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V
+// โค้ดเดิม: CORS อยู่ตรงนี้
+// โค้ดใหม่: CORS ยังอยู่ตรงนี้ แต่มันไม่ควรบล็อก Static Files ที่เราจะย้ายขึ้นไปข้างบน
 
 app.use(cors({
   origin: function(origin, callback) {
@@ -128,11 +132,12 @@ app.use('/api/v1/reports', rateLimiter, reportsRoutes);
 app.use('/api/v1/admin', rateLimiter, adminRoutes);
 
 // ============================================
-// Frontend Serving Logic (แก้ไขใหม่)
+// Frontend Serving Logic (แก้ไขใหม่และย้ายตำแหน่ง)
+// ต้องอยู่หลัง API Routes แต่ก่อน Error Handler
 // ============================================
 
 // 1. Serve static files from the 'public' directory
-// (Folder 'public' will be created by Dockerfile from frontend build)
+// Requests for static files (JS/CSS/etc.) will be handled here, skipping the error handler below
 app.use(express.static(path.join(__dirname, 'public')));
 
 // 2. Handle React Routing (SPA fallback)
