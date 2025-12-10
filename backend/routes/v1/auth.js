@@ -17,7 +17,7 @@ const {
   requireAuth
 } = require('../../middleware/auth');
 const logger = require('../../services/logger');
-const { loginAttemptsOps } = require('../../services/database');
+const { loginAttemptsOps, appLogsOps } = require('../../services/database');
 
 // ============================================
 // Configuration
@@ -56,8 +56,8 @@ function recordLoginAttempt(identifier, success) {
 const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
-  sameSite: 'strict',
-  path: '/api'
+  sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax', // Lax for dev, strict for prod
+  path: '/'  // Changed from /api to / for broader scope
 };
 
 if (process.env.COOKIE_DOMAIN) {
@@ -132,7 +132,16 @@ router.post('/admin/login', async (req, res) => {
     
     if (!isValidPassword) {
       const result = recordLoginAttempt(identifier, false);
+      
+      // Log failed login attempt
+      appLogsOps.add('SECURITY', 'AUTH', `เข้าสู่ระบบล้มเหลว: ${username}`, {
+        username,
+        attemptsRemaining: result.attemptsRemaining,
+        locked: result.locked
+      }, clientIP);
+      
       if (result.locked) {
+        appLogsOps.add('SECURITY', 'AUTH', `บัญชีถูกล็อค: ${username}`, { username }, clientIP);
         return res.status(429).json({ error: 'Too Many Requests', message: 'บัญชีถูกล็อคชั่วคราว' });
       }
       return res.status(401).json({ error: 'Unauthorized', message: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' });
@@ -142,6 +151,13 @@ router.post('/admin/login', async (req, res) => {
     const tokens = generateTokenPair('admin', { role: 'admin', username });
     recordLoginAttempt(identifier, true);
     setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
+    
+    // Log successful login
+    appLogsOps.add('SECURITY', 'AUTH', `Admin เข้าสู่ระบบสำเร็จ: ${username}`, {
+      username,
+      role: 'admin'
+    }, clientIP);
+    
     console.log(`[SECURITY] Admin login success: ${username} from ${clientIP}`);
     
     res.json({

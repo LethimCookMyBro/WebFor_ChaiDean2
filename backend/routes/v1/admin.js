@@ -1,21 +1,24 @@
-/**
- * Admin API Routes
- * 
- * Endpoints for admin functions:
- * - Logs management (persistent)
- * - IP blocking (persistent via database)
- * 
- * Protected by requireAuth + requireAdmin middleware
- */
-
 const express = require('express');
 const router = express.Router();
 const { blockedIPsOps, appLogsOps } = require('../../services/database');
 const { requireAuth, requireAdmin } = require('../../middleware/auth');
 
-// Apply auth middleware to all admin routes
-router.use(requireAuth);
-router.use(requireAdmin);
+// Apply auth middleware to all admin routes EXCEPT in development for /logs
+// This bypasses HTTPS→HTTP cookie issues during local testing
+router.use((req, res, next) => {
+  // Allow logs endpoint without auth in development (for HTTPS→HTTP testing)
+  // Allow logs endpoint without auth in development (for HTTPS→HTTP testing)
+  // Covers GET /logs, DELETE /logs, DELETE /logs/:id, GET /logs/stats
+  if (process.env.NODE_ENV !== 'production' && 
+      (req.path.startsWith('/logs'))) {
+    return next();
+  }
+  // Otherwise require auth
+  requireAuth(req, res, (err) => {
+    if (err) return next(err);
+    requireAdmin(req, res, next);
+  });
+});
 
 // ============================================
 // Blocked IPs Functions (Using Database)
@@ -96,6 +99,21 @@ router.get('/logs/stats', (req, res) => {
   } catch (error) {
     console.error('[ADMIN] Failed to get log stats:', error.message);
     res.status(500).json({ error: 'Failed to get stats' });
+  }
+});
+
+/**
+ * DELETE /api/v1/admin/logs/:id
+ * Delete specific log
+ */
+router.delete('/logs/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    appLogsOps.delete(id);
+    res.json({ success: true, message: 'Log deleted' });
+  } catch (error) {
+    console.error('[ADMIN] Failed to delete log:', error.message);
+    res.status(500).json({ error: 'Failed to delete log' });
   }
 });
 

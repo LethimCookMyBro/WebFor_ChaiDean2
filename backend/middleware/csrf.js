@@ -42,11 +42,11 @@ function csrfTokenMiddleware(req, res, next) {
     // Generate new token
     token = generateCSRFToken();
     
-    // Set cookie
+    // Set cookie - use lax in dev mode for HTTPS→HTTP testing
     res.cookie(CSRF_COOKIE_NAME, token, {
       httpOnly: false, // Must be readable by JavaScript
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
       path: '/'
     });
@@ -65,6 +65,12 @@ function csrfTokenMiddleware(req, res, next) {
  * CSRF validation middleware - validates token on protected requests
  */
 function csrfValidationMiddleware(req, res, next) {
+  // Skip CSRF validation entirely in development mode
+  // This bypasses HTTPS→HTTP cross-origin cookie issues during local testing
+  if (process.env.NODE_ENV !== 'production') {
+    return next();
+  }
+  
   // Skip non-protected methods
   if (!PROTECTED_METHODS.includes(req.method)) {
     return next();

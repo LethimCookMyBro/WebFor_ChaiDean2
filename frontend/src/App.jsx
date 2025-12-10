@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
-import { Wifi, WifiOff, Clock, Activity, Shield } from 'lucide-react'
+import { Wifi, WifiOff, Clock, Activity, Shield, MapPin, MapPinOff } from 'lucide-react'
 
 // Import components
 import BottomNav from './components/BottomNav'
@@ -33,6 +33,47 @@ function MainApp() {
   const [threatLevel, setThreatLevel] = useState(() => {
     return localStorage.getItem('adminThreatLevel') || 'YELLOW'
   })
+  const [locationStatus, setLocationStatus] = useState('pending') // 'pending' | 'granted' | 'denied' | 'unavailable'
+  const [userLocation, setUserLocation] = useState(null)
+  
+  // Pull-to-refresh state
+  const [pullDistance, setPullDistance] = useState(0)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [startY, setStartY] = useState(0)
+  const PULL_THRESHOLD = 80
+
+  // Request GPS permission immediately on load
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setLocationStatus('unavailable')
+      return
+    }
+
+    // Request location immediately
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocationStatus('granted')
+        setUserLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        })
+        // Store for other components to use
+        localStorage.setItem('userLocation', JSON.stringify({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          timestamp: Date.now()
+        }))
+      },
+      (error) => {
+        setLocationStatus('denied')
+      },
+      { 
+        enableHighAccuracy: true, 
+        timeout: 10000, 
+        maximumAge: 60000 
+      }
+    )
+  }, [])
 
   // Update time every second (for real-time display)
   useEffect(() => {
@@ -63,14 +104,75 @@ function MainApp() {
     }
   }, [])
 
+  // Pull-to-refresh handlers
+  const handleTouchStart = (e) => {
+    if (window.scrollY === 0) {
+      setStartY(e.touches[0].clientY)
+    }
+  }
+
+  const handleTouchMove = (e) => {
+    if (startY === 0 || isRefreshing) return
+    if (window.scrollY > 0) {
+      setPullDistance(0)
+      return
+    }
+    const currentY = e.touches[0].clientY
+    const diff = currentY - startY
+    if (diff > 0) {
+      setPullDistance(Math.min(diff * 0.5, 120))
+    }
+  }
+
+  const handleTouchEnd = () => {
+    if (pullDistance >= PULL_THRESHOLD && !isRefreshing) {
+      setIsRefreshing(true)
+      setPullDistance(60)
+      // Refresh the page
+      setTimeout(() => {
+        window.location.reload()
+      }, 500)
+    } else {
+      setPullDistance(0)
+    }
+    setStartY(0)
+  }
+
   const currentThreat = THREAT_LEVELS[threatLevel]
 
   return (
-    <div className="min-h-screen bg-slate-100 pb-20">
-      {/* Header */}
-      <header className="bg-slate-900 text-white safe-area-top">
-        <div className="px-4 py-2 flex items-center justify-between text-sm">
+    <div 
+      className="min-h-screen bg-slate-100 pb-20"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Pull-to-refresh indicator */}
+      {pullDistance > 0 && (
+        <div 
+          className="fixed top-0 left-0 right-0 flex justify-center items-center bg-blue-500 text-white z-50 transition-all"
+          style={{ height: pullDistance }}
+        >
           <div className="flex items-center gap-2">
+            {isRefreshing ? (
+              <>
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <span className="text-sm font-medium">กำลังรีเฟรช...</span>
+              </>
+            ) : pullDistance >= PULL_THRESHOLD ? (
+              <span className="text-sm font-medium">ปล่อยเพื่อรีเฟรช ↓</span>
+            ) : (
+              <span className="text-sm font-medium">ดึงลงเพื่อรีเฟรช...</span>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* Header */}
+      <header className="bg-slate-900 text-white safe-area-top" style={{ marginTop: pullDistance }}>
+        <div className="px-4 py-2 flex items-center justify-between text-sm">
+          <div className="flex items-center gap-3">
+            {/* Online Status */}
             {isOnline ? (
               <>
                 <Wifi className="w-4 h-4 text-green-400" />
@@ -82,6 +184,24 @@ function MainApp() {
                 <span className="text-red-400 text-xs">Offline</span>
               </>
             )}
+            
+            {/* GPS Status */}
+            {locationStatus === 'granted' ? (
+              <>
+                <MapPin className="w-4 h-4 text-green-400" />
+                <span className="text-green-400 text-xs">GPS</span>
+              </>
+            ) : locationStatus === 'denied' ? (
+              <>
+                <MapPinOff className="w-4 h-4 text-red-400" />
+                <span className="text-red-400 text-xs">No GPS</span>
+              </>
+            ) : locationStatus === 'pending' ? (
+              <>
+                <MapPin className="w-4 h-4 text-yellow-400 animate-pulse" />
+                <span className="text-yellow-400 text-xs">GPS...</span>
+              </>
+            ) : null}
           </div>
           <div className="flex items-center gap-3">
             <a href="/admin" className="p-1 hover:bg-slate-800 rounded" title="Admin">

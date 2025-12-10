@@ -60,7 +60,6 @@ export default function LiveReports({ userLocation = null }) {
     // Listen for storage changes (when Admin modifies data from another tab)
     const handleStorageChange = (e) => {
       if (e.key === 'userReports') {
-        console.log('[LiveReports] Storage changed, refreshing...')
         fetchReports()
       }
     }

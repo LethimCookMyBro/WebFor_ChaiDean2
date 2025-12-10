@@ -1,18 +1,30 @@
 const express = require('express');
 const router = express.Router();
 const { THRESHOLDS, ZONES } = require('../../riskCalculator');
-const { settingsOps, broadcastsOps } = require('../../services/database');
+const { settingsOps, broadcastsOps, appLogsOps } = require('../../services/database');
+const cache = require('../../services/cache');
+
+// Cache keys
+const CACHE_KEYS = {
+  THREAT_LEVEL: 'status:threat_level',
+  BROADCASTS: 'status:broadcasts'
+};
 
 /**
  * GET /api/v1/status
  * System status and configuration info
  */
 router.get('/', (req, res) => {
-  const threatLevel = settingsOps.get('threat_level') || 'YELLOW';
+  // Use cached threat level if available
+  let threatLevel = cache.get(CACHE_KEYS.THREAT_LEVEL);
+  if (!threatLevel) {
+    threatLevel = settingsOps.get('threat_level') || 'YELLOW';
+    cache.set(CACHE_KEYS.THREAT_LEVEL, threatLevel, 30);
+  }
   
   res.json({
     status: 'operational',
-    version: '1.0.0',
+    version: '2.5.0',
     timestamp: new Date().toISOString(),
     threatLevel,
     config: {
@@ -37,19 +49,26 @@ router.get('/', (req, res) => {
 });
 
 // ============================================
-// Threat Level API (persistent)
+// Threat Level API (persistent + cached)
 // ============================================
 
 /**
  * GET /api/v1/status/threat-level
- * Get current threat level
+ * Get current threat level (cached for 30s)
  */
 router.get('/threat-level', (req, res) => {
   try {
-    const level = settingsOps.get('threat_level') || 'YELLOW';
+    // Try cache first
+    let level = cache.get(CACHE_KEYS.THREAT_LEVEL);
+    if (!level) {
+      level = settingsOps.get('threat_level') || 'YELLOW';
+      cache.set(CACHE_KEYS.THREAT_LEVEL, level, 30); // Cache for 30 seconds
+    }
+    
     res.json({
       success: true,
       level,
+      cached: !!cache.get(CACHE_KEYS.THREAT_LEVEL),
       updatedAt: new Date().toISOString()
     });
   } catch (error) {
@@ -74,7 +93,18 @@ router.put('/threat-level', (req, res) => {
       });
     }
     
+    const oldLevel = settingsOps.get('threat_level') || 'YELLOW';
     settingsOps.set('threat_level', level);
+    
+    // Invalidate cache on write
+    cache.invalidate(CACHE_KEYS.THREAT_LEVEL);
+    
+    // Log to database
+    appLogsOps.add('SECURITY', 'SYSTEM', `ระดับภัยคุกคามเปลี่ยน: ${oldLevel} → ${level}`, {
+      oldLevel,
+      newLevel: level
+    }, req.clientIp || req.ip);
+    
     console.log(`[STATUS] Threat level changed to ${level}`);
     
     res.json({
@@ -142,6 +172,13 @@ router.post('/broadcasts', (req, res) => {
     };
     
     broadcastsOps.create(broadcast);
+    
+    // Log to database
+    appLogsOps.add('INFO', 'BROADCAST', `ประกาศใหม่: ${message.trim().substring(0, 50)}...`, {
+      broadcastId: broadcast.id,
+      messagePreview: message.trim().substring(0, 100)
+    }, req.clientIp || req.ip);
+    
     console.log(`[BROADCAST] New broadcast: ${message.substring(0, 50)}...`);
     
     res.status(201).json({
@@ -166,6 +203,11 @@ router.delete('/broadcasts/:id', (req, res) => {
     if (!deleted) {
       return res.status(404).json({ error: 'Not Found' });
     }
+    
+    // Log to database
+    appLogsOps.add('WARN', 'BROADCAST', `ลบประกาศ: ${id}`, {
+      broadcastId: id
+    }, req.clientIp || req.ip);
     
     res.json({ success: true, message: 'Broadcast deleted' });
   } catch (error) {

@@ -298,57 +298,123 @@ export default function AdminDashboard() {
     }
   }
 
-  const handleDeleteSelectedReports = () => {
+  const handleDeleteSelectedReports = async () => {
     if (selectedReports.length === 0) return
     if (!confirm(`ยืนยันลบ ${selectedReports.length} รายงาน?`)) return
     
-    const currentReports = JSON.parse(localStorage.getItem('userReports') || '[]')
-    const updated = currentReports.filter(r => !selectedReports.includes(r.id))
-    localStorage.setItem('userReports', JSON.stringify(updated))
+    // Delete via API for each selected report
+    for (const reportId of selectedReports) {
+      try {
+        await fetch(`${API_BASE}/api/v1/reports/${reportId}`, {
+          method: 'DELETE',
+          headers: getHeaders(false),
+          credentials: 'include'
+        })
+      } catch (e) {
+        console.error('Failed to delete report:', reportId, e)
+      }
+    }
+    
+    // Update state
+    const updated = reports.filter(r => !selectedReports.includes(r.id))
     setReports(updated)
     setSelectedReports([])
     addSystemLog(`Bulk deleted ${selectedReports.length} reports`)
   }
 
-  const handleBulkDeleteReports = (countInput) => {
-    const currentReports = JSON.parse(localStorage.getItem('userReports') || '[]')
+  const handleBulkDeleteReports = async (countInput) => {
     let count = 0
-    if (countInput === 'all') count = currentReports.length
-    else count = Math.min(parseInt(countInput) || 0, currentReports.length)
+    if (countInput === 'all') count = reports.length
+    else count = Math.min(parseInt(countInput) || 0, reports.length)
     
     if (count <= 0) return
     if (!confirm(`ยืนยันลบ ${count} รายงานล่าสุด?`)) return
     
-    const updated = currentReports.slice(count)
-    localStorage.setItem('userReports', JSON.stringify(updated))
+    // Get IDs of reports to delete (newest first)
+    const idsToDelete = reports.slice(0, count).map(r => r.id)
+    
+    // Delete via API
+    for (const reportId of idsToDelete) {
+      try {
+        await fetch(`${API_BASE}/api/v1/reports/${reportId}`, {
+          method: 'DELETE',
+          headers: getHeaders(false),
+          credentials: 'include'
+        })
+      } catch (e) {
+        console.error('Failed to delete report:', reportId, e)
+      }
+    }
+    
+    // Update state
+    const updated = reports.slice(count)
     setReports(updated)
     setSelectedReports([])
     addSystemLog(`Bulk deleted ${count} reports`)
   }
 
   // --- Log Actions ---
-  const handleDeleteSelectedLogs = () => {
+  const handleDeleteSelectedLogs = async () => {
       if (selectedLogs.length === 0) return
       if (!confirm(`ยืนยันลบ ${selectedLogs.length} รายการ?`)) return
+      
+      // Delete via API
+      for (const logId of selectedLogs) {
+        try {
+          await fetch(`${API_BASE}/api/v1/admin/logs/${logId}`, {
+            method: 'DELETE',
+            headers: getHeaders(false),
+            credentials: 'include'
+          })
+        } catch (e) {
+          console.error('Failed to delete log:', logId, e)
+        }
+      }
       
       const updated = logs.filter(log => !selectedLogs.includes(log.id))
       setLogs(updated)
       setSelectedLogs([])
-      localStorage.setItem('systemLogs', JSON.stringify(updated))
-      // Removed log creation to prevent loop
+      // addSystemLog not needed as we just deleted logs
   }
 
-  const handleBulkDeleteLogs = (countInput) => {
-      const currentLogs = JSON.parse(localStorage.getItem('systemLogs') || '[]')
-      let count = 0
-      if (countInput === 'all') count = currentLogs.length
-      else count = Math.min(parseInt(countInput) || 0, currentLogs.length)
-      
+  const handleBulkDeleteLogs = async (countInput) => {
+      if (countInput === 'all') {
+        if (!confirm('ยืนยันลบ Logs ทั้งหมด?')) return
+        try {
+            await fetch(`${API_BASE}/api/v1/admin/logs`, {
+                method: 'DELETE',
+                headers: getHeaders(false),
+                credentials: 'include'
+            })
+            setLogs([])
+            setSelectedLogs([])
+        } catch (e) {
+            console.error('Failed to clear logs:', e)
+        }
+        return
+      }
+
+      let count = Math.min(parseInt(countInput) || 0, logs.length)
       if (count <= 0) return
       if (!confirm(`ยืนยันลบ Logs ${count} รายการล่าสุด?`)) return
       
-      const updated = currentLogs.slice(count)
-      localStorage.setItem('systemLogs', JSON.stringify(updated))
+      // Get IDs to delete (first 'count' elements are newest)
+      const idsToDelete = logs.slice(0, count).map(l => l.id)
+
+      // Delete via API
+      for (const logId of idsToDelete) {
+        try {
+          await fetch(`${API_BASE}/api/v1/admin/logs/${logId}`, {
+            method: 'DELETE',
+            headers: getHeaders(false),
+            credentials: 'include'
+          })
+        } catch (e) {
+          console.error('Failed to delete log:', logId, e)
+        }
+      }
+      
+      const updated = logs.slice(count)
       setLogs(updated)
       setSelectedLogs([])
   }

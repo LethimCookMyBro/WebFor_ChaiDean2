@@ -114,6 +114,10 @@ app.use('/api/v1', csrfValidationMiddleware);
 // ============================================
 // API Routes
 // ============================================
+
+// Top-level health check for Railway
+app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
+
 app.use('/api/health', healthRoutes);
 app.use('/api/v1/auth', authRateLimiter, authRoutes);
 app.use('/api/v1/locate', rateLimiter, locateRoutes);

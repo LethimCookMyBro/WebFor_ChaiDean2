@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { reportsOps } = require('../../services/database');
+const { reportsOps, appLogsOps } = require('../../services/database');
 
 /**
  * GET /api/v1/reports
@@ -71,6 +71,9 @@ router.post('/', (req, res) => {
                      req.body.ip || 
                      'unknown';
     
+    // Clean IP (remove ::ffff: prefix)
+    const cleanIP = clientIP.replace(/^::ffff:/, '');
+    
     const newReport = {
       id: `rpt_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
       type,
@@ -80,13 +83,21 @@ router.post('/', (req, res) => {
       description: description || '',
       time: new Date().toISOString(),
       verified: false,
-      ip: clientIP,
-      district: district || null,
+      ip: cleanIP,
       subdistrict: subdistrict || null
     };
     
     reportsOps.create(newReport);
-    console.log(`[REPORT] New report from ${clientIP}: ${type}`);
+    
+    // Log to database
+    appLogsOps.add('INFO', 'REPORT', `รายงานใหม่: ${type}`, {
+      reportId: newReport.id,
+      type: type,
+      location: locationStr,
+      hasGPS: !!(lat && lng)
+    }, cleanIP);
+    
+    console.log(`[REPORT] New report from ${cleanIP}: ${type}`);
     
     res.status(201).json({
       success: true,
@@ -112,6 +123,14 @@ router.put('/:id/verify', (req, res) => {
     if (!report) return res.status(404).json({ error: 'Not found' });
     
     reportsOps.update(id, { verified });
+    
+    // Log to database
+    appLogsOps.add('INFO', 'REPORT', `รายงาน ${verified ? 'ยืนยันแล้ว' : 'ยกเลิกยืนยัน'}: ${report.type}`, {
+      reportId: id,
+      verified: verified
+    }, req.clientIp || req.ip);
+    
+    console.log(`[REPORT] Verified report ${id}: ${verified}`);
     
     res.json({ 
       success: true, 
@@ -142,6 +161,12 @@ router.put('/:id', (req, res) => {
     
     reportsOps.update(id, updates);
     
+    // Log to database
+    appLogsOps.add('INFO', 'REPORT', `แก้ไขรายงาน: ${report.type}`, {
+      reportId: id,
+      changes: Object.keys(updates)
+    }, req.clientIp || req.ip);
+    
     console.log(`[REPORT] Edited report ${id}`);
     res.json({ 
       success: true, 
@@ -161,8 +186,14 @@ router.delete('/:id', (req, res) => {
   try {
     const { id } = req.params;
     
+    const report = reportsOps.getById(id);
     const deleted = reportsOps.delete(id);
     if (!deleted) return res.status(404).json({ error: 'Not found' });
+    
+    // Log to database
+    appLogsOps.add('WARN', 'REPORT', `ลบรายงาน: ${report?.type || id}`, {
+      reportId: id
+    }, req.clientIp || req.ip);
     
     console.log(`[REPORT] Deleted report ${id}`);
     res.json({ success: true, message: 'Deleted' });

@@ -1,37 +1,66 @@
-# Multi-stage Dockerfile for Border Safety Risk Checker
+# Multi-stage Dockerfile for Border Safety - Railway Optimized
+# Optimized for: Express + React + SQLite (better-sqlite3)
 
+# ============================================
 # Stage 1: Build frontend
-FROM node:18-alpine AS frontend-build
+# ============================================
+FROM node:20-alpine AS frontend-build
 WORKDIR /app/frontend
+
+# Copy package files first (better layer caching)
 COPY frontend/package*.json ./
-RUN npm ci
+RUN npm ci --silent
+
+# Copy source and build
 COPY frontend/ ./
 RUN npm run build
 
+# ============================================
 # Stage 2: Production
-FROM node:18-alpine AS production
+# ============================================
+FROM node:20-alpine AS production
 WORKDIR /app
 
-# Install backend dependencies
+# Install build dependencies for better-sqlite3
+RUN apk add --no-cache python3 make g++ sqlite
+
+# Copy backend package files
 COPY backend/package*.json ./
-RUN npm ci --only=production
+
+# Install production dependencies only
+RUN npm ci --only=production --silent && \
+  npm cache clean --force
+
+# Remove build dependencies to reduce image size
+RUN apk del python3 make g++
 
 # Copy backend source
 COPY backend/ ./
 
-# Copy frontend build to be served by Express (optional static serving)
+# Copy frontend build
 COPY --from=frontend-build /app/frontend/dist ./public
+
+# Create data directory for SQLite
+RUN mkdir -p /data && chmod 755 /data
 
 # Environment variables
 ENV NODE_ENV=production
 ENV PORT=3001
+ENV DATABASE_PATH=/data/database.sqlite
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs && \
+  adduser -S nodejs -u 1001 -G nodejs && \
+  chown -R nodejs:nodejs /app /data
+
+USER nodejs
 
 # Expose port
 EXPOSE 3001
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3001/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3001/health || exit 1
 
 # Start server
 CMD ["node", "server.js"]

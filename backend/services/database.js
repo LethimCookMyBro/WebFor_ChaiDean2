@@ -30,14 +30,39 @@ function initDatabase() {
       fs.mkdirSync(dbDir, { recursive: true });
     }
 
-    // Create database connection
+    // Create database connection with timeout
     db = new Database(DB_PATH, { 
-      verbose: process.env.NODE_ENV === 'development' ? console.log : null 
+      verbose: process.env.NODE_ENV === 'development' ? console.log : null,
+      timeout: 10000  // 10 second timeout for busy database
     });
 
-    // Enable WAL mode for better concurrency
+    // ============================================
+    // SQLite PRAGMA Optimizations for Railway
+    // ============================================
+    
+    // WAL mode for better concurrency (reads don't block writes)
     db.pragma('journal_mode = WAL');
+    
+    // Foreign key constraints
     db.pragma('foreign_keys = ON');
+    
+    // Busy timeout: wait 5 seconds if database is locked
+    db.pragma('busy_timeout = 5000');
+    
+    // NORMAL sync is faster but still safe with WAL
+    db.pragma('synchronous = NORMAL');
+    
+    // 64MB cache for read-heavy operations
+    db.pragma('cache_size = -64000');
+    
+    // Store temp tables in memory for speed
+    db.pragma('temp_store = MEMORY');
+    
+    // Optimize memory-mapped I/O (256MB)
+    db.pragma('mmap_size = 268435456');
+    
+    // Checkpoint WAL every 1000 pages
+    db.pragma('wal_autocheckpoint = 1000');
 
     // Run schema migration
     if (fs.existsSync(SCHEMA_PATH)) {
@@ -625,6 +650,16 @@ const appLogsOps = {
   clear() {
     const stmt = db.prepare('DELETE FROM app_logs');
     stmt.run();
+  },
+
+  /**
+   * Delete specific log
+   */
+  delete(id) {
+    // Handle "log_123" format or just "123"
+    const dbId = id.toString().replace('log_', '');
+    const stmt = db.prepare('DELETE FROM app_logs WHERE id = ?');
+    stmt.run(dbId);
   },
 
   /**

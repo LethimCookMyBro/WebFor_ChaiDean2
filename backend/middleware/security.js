@@ -37,6 +37,14 @@ function rateLimiter(req, res, next) {
   const ip = req.clientIp || req.ip || 'unknown';
   const now = Date.now();
   
+  // Lazy load autoBlocker to avoid circular dependencies
+  let autoBlocker;
+  try {
+    autoBlocker = require('../services/autoBlocker');
+  } catch (e) {
+    // AutoBlocker not available yet
+  }
+  
   if (!requestCounts.has(ip)) {
     requestCounts.set(ip, { count: 1, startTime: now });
     return next();
@@ -55,6 +63,18 @@ function rateLimiter(req, res, next) {
   
   // Check limit
   if (record.count > RATE_LIMIT_MAX) {
+    // Log to autoBlocker for potential auto-block
+    if (autoBlocker) {
+      const result = autoBlocker.logSecurityEvent(ip, 'RATE_LIMIT', 
+        `Rate limit exceeded: ${record.count} requests in ${RATE_LIMIT_WINDOW/1000}s`, 
+        { count: record.count, path: req.path }
+      );
+      
+      if (result.autoBlocked) {
+        console.log(`[SECURITY] 🚨 IP ${ip} auto-blocked due to repeated rate limit violations`);
+      }
+    }
+    
     console.warn(`[SECURITY] Rate limit exceeded: IP=${ip}`);
     
     return res.status(429).json({
@@ -274,6 +294,15 @@ function validateArrayLengths(obj, maxLength = MAX_ARRAY_LENGTH) {
  */
 function sanitizeRequest(req, res, next) {
   const threats = [];
+  const ip = req.clientIp || req.ip || 'unknown';
+  
+  // Lazy load autoBlocker
+  let autoBlocker;
+  try {
+    autoBlocker = require('../services/autoBlocker');
+  } catch (e) {
+    // AutoBlocker not available
+  }
   
   // Validate request body depth
   if (req.body && !validateObjectDepth(req.body)) {
@@ -307,9 +336,31 @@ function sanitizeRequest(req, res, next) {
     threats.push(...result.threats);
   }
   
-  // Log detected threats
+  // Log detected threats and trigger auto-block
   if (threats.length > 0) {
     console.warn(`[SECURITY] Threats detected in request ${req.requestId}:`, threats);
+    
+    // Log to autoBlocker for potential auto-block
+    if (autoBlocker) {
+      threats.forEach(threat => {
+        if (threat.includes('sql_injection')) {
+          autoBlocker.logSecurityEvent(ip, 'SQL_INJECTION', 
+            `🚨 SQL Injection attempt detected: ${threat}`, 
+            { threat, path: req.path, requestId: req.requestId }
+          );
+        } else if (threat.includes('xss')) {
+          autoBlocker.logSecurityEvent(ip, 'XSS', 
+            `🚨 XSS attempt detected: ${threat}`, 
+            { threat, path: req.path, requestId: req.requestId }
+          );
+        } else if (threat.includes('command_injection')) {
+          autoBlocker.logSecurityEvent(ip, 'SUSPICIOUS', 
+            `🚨 Command injection attempt detected: ${threat}`, 
+            { threat, path: req.path, requestId: req.requestId }
+          );
+        }
+      });
+    }
     
     // For critical threats, block the request
     const criticalThreats = threats.filter(t => 

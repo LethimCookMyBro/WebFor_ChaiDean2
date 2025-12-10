@@ -74,12 +74,62 @@ export default function ReportForm({ onSubmitSuccess }) {
   const getGPSLocation = () => {
     setLoadingLocation(true)
     setError(null)
-    if (!navigator.geolocation) { setError('Browser ไม่รองรับ GPS'); setLoadingLocation(false); return }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => { setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setFormData({ ...formData, locationType: 'gps' }); setLoadingLocation(false) },
-      () => { setError('ไม่สามารถเข้าถึง GPS'); setFormData({ ...formData, locationType: 'manual' }); setLoadingLocation(false) },
-      { enableHighAccuracy: true, timeout: 10000 }
-    )
+    
+    // Check if geolocation is available
+    if (!navigator.geolocation) { 
+      setError('Browser ไม่รองรับ GPS')
+      setLoadingLocation(false)
+      return 
+    }
+    
+    // Check if running on HTTPS (required for GPS on mobile)
+    const currentProtocol = window.location.protocol
+    const currentHostname = window.location.hostname
+    if (currentProtocol === 'http:' && currentHostname !== 'localhost') {
+      setError('GPS ต้องใช้ HTTPS - กรุณาเปิดผ่าน https://')
+      setLoadingLocation(false)
+      return
+    }
+    
+    // Try high accuracy first with short timeout, fallback to low accuracy
+    const tryGetPosition = (highAccuracy, timeout) => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => { 
+          setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+          setFormData({ ...formData, locationType: 'gps' })
+          setLoadingLocation(false) 
+        },
+        (geoError) => { 
+          if (highAccuracy && geoError.code === geoError.TIMEOUT) {
+            // Retry with low accuracy if high accuracy times out
+            tryGetPosition(false, 5000)
+            return
+          }
+          
+          // More detailed error messages
+          let errorMsg = 'ไม่สามารถเข้าถึง GPS'
+          switch(geoError.code) {
+            case geoError.PERMISSION_DENIED:
+              errorMsg = 'GPS ถูกปฏิเสธ - กรุณาอนุญาต Location ใน Browser Settings'
+              break
+            case geoError.POSITION_UNAVAILABLE:
+              errorMsg = 'ไม่พบสัญญาณ GPS - ลองเปิด Location บนอุปกรณ์'
+              break
+            case geoError.TIMEOUT:
+              errorMsg = 'หมดเวลารอ GPS - ลองใหม่หรือเลือกตำบลแทน'
+              break
+          }
+          console.warn('[GPS Error]', geoError.code, geoError.message)
+          setError(errorMsg)
+          setFormData({ ...formData, locationType: 'manual' })
+          setLoadingLocation(false) 
+        },
+        { enableHighAccuracy: highAccuracy, timeout: timeout, maximumAge: 60000 }
+      )
+    }
+    
+    // Start with high accuracy, 5 second timeout
+    tryGetPosition(true, 5000)
   }
 
   const handleSubmit = async (e) => {
@@ -125,7 +175,6 @@ export default function ReportForm({ onSubmitSuccess }) {
     }
     
     setSubmitting(true)
-    console.log('[Report] Saving with IP:', finalIP, 'GPS:', realLat, realLng)
     
     const newReport = {
       id: `rpt_${Date.now()}_${Math.random().toString(36).substr(2,5)}`,
@@ -148,8 +197,6 @@ export default function ReportForm({ onSubmitSuccess }) {
     try {
       // Get CSRF token from cookie
       const csrfToken = document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] || ''
-      
-      console.log('[Report] Sending to API:', `${API_BASE}/api/v1/reports`, newReport.type)
       
       const res = await fetch(`${API_BASE}/api/v1/reports`, {
         method: 'POST',
@@ -177,7 +224,6 @@ export default function ReportForm({ onSubmitSuccess }) {
       }
       
       const result = await res.json()
-      console.log('[Report] Saved to API successfully:', result)
     } catch (err) {
       console.error('[Report] API failed, saving locally:', err.message)
       // Fallback to localStorage if API fails

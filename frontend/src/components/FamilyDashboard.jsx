@@ -121,7 +121,7 @@ export default function FamilyDashboard({ userId, userName, onMemberClick, onRef
         body: JSON.stringify({ userId: memberData.userId, groupName: 'default' })
       })
     } catch (e) {
-      console.log('Backend sync skipped')
+      // Backend sync skipped silently
     }
     
     setNewMember({ name: '', phone: '', relationship: '' })
@@ -149,7 +149,7 @@ export default function FamilyDashboard({ userId, userName, onMemberClick, onRef
         body: JSON.stringify({ userId: memberId, status: newStatus })
       })
     } catch (e) {
-      console.log('Status sync skipped')
+      // Status sync skipped silently
     }
   }
   
