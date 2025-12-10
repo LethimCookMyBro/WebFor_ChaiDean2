@@ -16,10 +16,21 @@ const authRoutes = require('./routes/v1/auth');
 const adminRoutes = require('./routes/v1/admin');
 const healthRoutes = require('./routes/health');
 
+// Services
 const logger = require('./services/logger');
+const { initDatabase } = require('./services/database');
 const { rateLimiter, sanitizeRequest, authRateLimiter } = require('./middleware/security');
 const { csrfTokenMiddleware, csrfValidationMiddleware } = require('./middleware/csrf');
 const { auditMiddleware } = require('./middleware/audit');
+
+// Initialize Database
+try {
+  initDatabase();
+  console.log('📦 Database initialized successfully');
+} catch (error) {
+  console.error('❌ Database initialization failed:', error.message);
+  process.exit(1);
+}
 
 const app = express();
 
@@ -116,8 +127,8 @@ app.get('/', (req, res) => {
   res.json({
     status: 'operational',
     service: 'Border Safety API',
-    version: '2.3',
-    storage: 'in-memory'
+    version: '2.4',
+    storage: 'SQLite (persistent)'
   });
 });
 
@@ -132,9 +143,10 @@ app.use((err, req, res, next) => {
 // ============================================
 app.listen(PORT, () => {
   console.log(`\n🚀 Server running on port ${PORT}`);
-  console.log(`📊 Storage: In-memory (Docker compatible)`);
+  console.log(`📦 Storage: SQLite (persistent)`);
   console.log(`🔒 Security: CSRF, Rate Limiting, IP Blocking enabled`);
-  console.log(`📝 Audit Logging: Console only\n`);
+  console.log(`📝 Audit Logging: Database + Console\n`);
 });
 
 module.exports = app;
+

@@ -16,8 +16,8 @@ const {
   verifyPassword,
   requireAuth
 } = require('../../middleware/auth');
-// const { timingSafeCompare } = require('../../utils/crypto'); // Unused
 const logger = require('../../services/logger');
+const { loginAttemptsOps } = require('../../services/database');
 
 // ============================================
 // Configuration
@@ -26,47 +26,27 @@ const logger = require('../../services/logger');
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
-// In-memory login attempts tracking
-const loginAttempts = new Map();
-
 // ============================================
-// Account Lockout
+// Account Lockout (Using Database)
 // ============================================
 
 function checkAccountLockout(identifier) {
-  const record = loginAttempts.get(identifier);
-  if (!record) return { locked: false, remainingMs: 0 };
-  
-  const now = Date.now();
-  if (record.lockedUntil && now < record.lockedUntil) {
-    return { locked: true, remainingMs: record.lockedUntil - now };
-  }
-  if (record.lockedUntil && now >= record.lockedUntil) {
-    loginAttempts.delete(identifier);
-    return { locked: false, remainingMs: 0 };
-  }
-  return { locked: false, remainingMs: 0 };
+  return loginAttemptsOps.isLocked(identifier);
 }
 
 function recordLoginAttempt(identifier, success) {
   if (success) {
-    loginAttempts.delete(identifier);
+    loginAttemptsOps.reset(identifier);
     return { locked: false, attemptsRemaining: MAX_LOGIN_ATTEMPTS };
   }
   
-  const record = loginAttempts.get(identifier) || { attempts: 0 };
-  record.attempts += 1;
-  record.lastAttempt = Date.now();
+  const result = loginAttemptsOps.recordAttempt(identifier, MAX_LOGIN_ATTEMPTS, LOCKOUT_DURATION_MS);
   
-  if (record.attempts >= MAX_LOGIN_ATTEMPTS) {
-    record.lockedUntil = Date.now() + LOCKOUT_DURATION_MS;
-    loginAttempts.set(identifier, record);
+  if (result.locked) {
     console.warn(`[SECURITY] Account locked: ${identifier} after ${MAX_LOGIN_ATTEMPTS} failed attempts`);
-    return { locked: true, attemptsRemaining: 0 };
   }
   
-  loginAttempts.set(identifier, record);
-  return { locked: false, attemptsRemaining: MAX_LOGIN_ATTEMPTS - record.attempts };
+  return result;
 }
 
 // ============================================

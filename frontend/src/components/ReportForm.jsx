@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Send, MapPin, Navigation, AlertTriangle, CheckCircle, Loader, Radio, Shield, Wifi } from 'lucide-react'
 
+// API Base - Dynamic for mobile compatibility
+const API_BASE = import.meta.env.VITE_API_URL || 
+  (window.location.hostname === 'localhost' 
+    ? 'http://localhost:3001' 
+    : `http://${window.location.hostname}:3001`)
+
 const TRAT_SUBDISTRICTS = {
   "เมืองตราด": ["ชำราก", "ตะกาง", "ท่ากุ่ม", "ท่าพริก", "วังกระแจะ", "หนองคันทรง", "หนองเสม็ด", "หนองโสน", "ห้วงน้ำขาว", "ห้วยแร้ง", "อ่าวใหญ่", "เนินทราย", "แหลมกลัด"],
   "คลองใหญ่": ["คลองใหญ่", "หาดเล็ก", "ไม้รูด"],
@@ -138,11 +144,47 @@ export default function ReportForm({ onSubmitSuccess }) {
       ip: finalIP
     }
     
-    // FIX: บันทึกแค่ localStorage เท่านั้น ไม่ส่ง API (ป้องกัน duplicate)
-    // API จะมี reports เก่าที่ไม่ sync กับ localStorage ทำให้เกิด duplicate
-    const existing = JSON.parse(localStorage.getItem('userReports') || '[]')
-    existing.unshift(newReport)
-    localStorage.setItem('userReports', JSON.stringify(existing))
+    // ส่งรายงานไป API เพื่อให้ sync ทุกอุปกรณ์
+    try {
+      // Get CSRF token from cookie
+      const csrfToken = document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] || ''
+      
+      console.log('[Report] Sending to API:', `${API_BASE}/api/v1/reports`, newReport.type)
+      
+      const res = await fetch(`${API_BASE}/api/v1/reports`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          type: newReport.type,
+          lat: newReport.lat,
+          lng: newReport.lng,
+          location: newReport.location,
+          description: newReport.description,
+          district: newReport.district,
+          subdistrict: newReport.subdistrict,
+          ip: finalIP
+        })
+      })
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }))
+        console.error('[Report] API Error:', res.status, errorData)
+        throw new Error(`API Error: ${res.status} - ${errorData.message || errorData.error}`)
+      }
+      
+      const result = await res.json()
+      console.log('[Report] Saved to API successfully:', result)
+    } catch (err) {
+      console.error('[Report] API failed, saving locally:', err.message)
+      // Fallback to localStorage if API fails
+      const existing = JSON.parse(localStorage.getItem('userReports') || '[]')
+      existing.unshift(newReport)
+      localStorage.setItem('userReports', JSON.stringify(existing))
+    }
     
     setSubmitted(true)
     setFormData({ type: '', description: '', locationType: 'manual' })

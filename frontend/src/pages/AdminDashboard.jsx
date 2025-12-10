@@ -68,8 +68,11 @@ export default function AdminDashboard() {
     return localStorage.getItem('adminThreatLevel') || 'YELLOW'
   })
 
-  // API Base
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+  // API Base - Dynamically use current hostname for mobile compatibility
+  const API_BASE = import.meta.env.VITE_API_URL || 
+    (window.location.hostname === 'localhost' 
+      ? 'http://localhost:3001' 
+      : `http://${window.location.hostname}:3001`)
 
   // Helper: Get CSRF token from cookie
   const getCSRFToken = () => {
@@ -92,29 +95,55 @@ export default function AdminDashboard() {
   const fetchData = async () => {
     setLoading(true)
     
-    // 1. Fetch Reports - ใช้ localStorage เป็น single source of truth
-    const userReports = JSON.parse(localStorage.getItem('userReports') || '[]')
-    setReports(userReports)
-
-    // 2. Fetch Broadcasts
-    const broadcastData = JSON.parse(localStorage.getItem('adminBroadcasts') || '[]')
-    setBroadcasts(broadcastData)
-
-    // 3. Fetch System Logs
-    const savedLogs = JSON.parse(localStorage.getItem('systemLogs') || '[]')
-    setLogs(savedLogs)
-    
-    // One-time session init log
-    const sessionKey = `admin_init_${new Date().toDateString()}`
-    if (!sessionStorage.getItem(sessionKey) && savedLogs.length === 0) {
-      sessionStorage.setItem(sessionKey, 'true')
-      const initLog = { id: `log_${Date.now()}`, message: 'System initialized', time: new Date().toISOString() }
-      const updatedLogs = [initLog]
-      localStorage.setItem('systemLogs', JSON.stringify(updatedLogs))
-      setLogs(updatedLogs)
+    // 1. Fetch Reports from API (syncs across devices)
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/reports`, { credentials: 'include' })
+      if (res.ok) {
+        const data = await res.json()
+        setReports(data.reports || [])
+      }
+    } catch (e) {
+      console.warn('Failed to fetch reports from API')
+      setReports([])
     }
 
-    // 4. Fetch Blocked IPs from API
+    // 2. Fetch Broadcasts from API
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/status/broadcasts`, { credentials: 'include' })
+      if (res.ok) {
+        const data = await res.json()
+        setBroadcasts(data.broadcasts || [])
+      }
+    } catch (e) {
+      // Fallback to localStorage for backwards compatibility
+      const broadcastData = JSON.parse(localStorage.getItem('adminBroadcasts') || '[]')
+      setBroadcasts(broadcastData)
+    }
+
+    // 3. Fetch Threat Level from API
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/status/threat-level`, { credentials: 'include' })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.level) setThreatLevel(data.level)
+      }
+    } catch (e) {
+      // Use localStorage as fallback
+    }
+
+    // 4. Fetch System Logs from API
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/logs`, { credentials: 'include' })
+      if (res.ok) {
+        const data = await res.json()
+        setLogs(data.logs || [])
+      }
+    } catch (e) {
+      const savedLogs = JSON.parse(localStorage.getItem('systemLogs') || '[]')
+      setLogs(savedLogs)
+    }
+
+    // 5. Fetch Blocked IPs from API
     try {
       const res = await fetch(`${API_BASE}/api/v1/admin/blocked-ips`, { credentials: 'include' })
       if (res.ok) {
@@ -122,12 +151,10 @@ export default function AdminDashboard() {
         setBlockedIPs(data.blockedIPs || [])
       }
     } catch (e) {
-      console.warn('Failed to fetch blocked IPs from API, using localStorage fallback')
-      const savedBlockedIPs = JSON.parse(localStorage.getItem('blockedIPs') || '[]')
-      setBlockedIPs(savedBlockedIPs.map(ip => typeof ip === 'string' ? { ip } : ip))
+      console.warn('Failed to fetch blocked IPs from API')
     }
 
-    // 5. Fetch Security Logs (still local for now)
+    // 6. Fetch Security Logs (local for now)
     const savedSecLogs = JSON.parse(localStorage.getItem('securityLogs') || '[]')
     setSecurityLogs(savedSecLogs)
 
@@ -140,10 +167,20 @@ export default function AdminDashboard() {
     return () => clearInterval(interval)
   }, [])
 
-  const handleThreatLevelChange = (level) => {
+  const handleThreatLevelChange = async (level) => {
     setThreatLevel(level)
-    localStorage.setItem('adminThreatLevel', level)
-    addSystemLog(`Changed threat level to ${level}`)
+    // Sync to backend API
+    try {
+      await fetch(`${API_BASE}/api/v1/status/threat-level`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({ level })
+      })
+    } catch (e) {
+      console.warn('Failed to sync threat level to API')
+    }
+    localStorage.setItem('adminThreatLevel', level) // Backup
   }
 
   const handleAdminLogout = () => {
@@ -170,13 +207,13 @@ export default function AdminDashboard() {
     // Optimistic UI update
     const updated = reports.map(r => r.id === reportId ? { ...r, verified: !currentStatus } : r)
     setReports(updated)
-    localStorage.setItem('userReports', JSON.stringify(updated))
     
-    // API Call
+    // API Call - sync to backend
     try {
         await fetch(`${API_BASE}/api/v1/reports/${reportId}/verify`, {
             method: 'PUT',
-            headers: {'Content-Type': 'application/json'},
+            headers: getHeaders(),
+            credentials: 'include',
             body: JSON.stringify({ verified: !currentStatus })
         })
         addSystemLog(`Verified report ${reportId}`)
@@ -188,21 +225,22 @@ export default function AdminDashboard() {
   const handleDeleteReport = async (reportId) => {
     if (!confirm('ยืนยันลบรายงานนี้?')) return
     
-    // Read from localStorage directly to ensure sync
-    const currentReports = JSON.parse(localStorage.getItem('userReports') || '[]')
-    const updated = currentReports.filter(r => r.id !== reportId)
-    
-    // Save to localStorage FIRST
-    localStorage.setItem('userReports', JSON.stringify(updated))
-    // Then update state
-    setReports(updated)
-    setSelectedReports(prev => prev.filter(id => id !== reportId))
-    
+    // Delete from API first
     try {
-        await fetch(`${API_BASE}/api/v1/reports/${reportId}`, { method: 'DELETE' })
+        await fetch(`${API_BASE}/api/v1/reports/${reportId}`, {
+          method: 'DELETE',
+          headers: getHeaders(false),
+          credentials: 'include'
+        })
     } catch (e) {
         console.error('API Error', e)
     }
+    
+    // Update state
+    const updated = reports.filter(r => r.id !== reportId)
+    setReports(updated)
+    setSelectedReports(prev => prev.filter(id => id !== reportId))
+    addSystemLog(`Deleted report ${reportId}`)
   }
 
   // --- Edit Report ---
@@ -215,15 +253,31 @@ export default function AdminDashboard() {
     })
   }
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editingReport) return
-    const currentReports = JSON.parse(localStorage.getItem('userReports') || '[]')
-    const updated = currentReports.map(r => 
+    
+    // Update via API
+    try {
+      await fetch(`${API_BASE}/api/v1/reports/${editingReport.id}`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({
+          type: editForm.type,
+          description: editForm.description,
+          location: editForm.location
+        })
+      })
+    } catch (e) {
+      console.error('API Error', e)
+    }
+    
+    // Update state
+    const updated = reports.map(r => 
       r.id === editingReport.id 
         ? { ...r, description: editForm.description, location: editForm.location, type: editForm.type, editedAt: new Date().toISOString() } 
         : r
     )
-    localStorage.setItem('userReports', JSON.stringify(updated))
     setReports(updated)
     setEditingReport(null)
     addSystemLog(`Edited report ${editingReport.id}`)
@@ -399,29 +453,66 @@ export default function AdminDashboard() {
   }
 
   // --- Broadcast ---
-  const handleSendBroadcast = () => {
+  const handleSendBroadcast = async () => {
     if (!broadcastMessage.trim()) return
-    const broadcast = {
-      id: `bc_${Date.now()}`,
-      message: broadcastMessage.trim(),
-      time: new Date().toISOString(),
-      from: 'admin'
+    
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/status/broadcasts`, {
+        method: 'POST',
+        headers: getHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({ message: broadcastMessage.trim() })
+      })
+      
+      if (res.ok) {
+        const data = await res.json()
+        setBroadcasts(prev => [data.broadcast, ...prev])
+        setBroadcastMessage('')
+        setBroadcastSent(true)
+        setTimeout(() => setBroadcastSent(false), 3000)
+      } else {
+        alert('Failed to send broadcast')
+      }
+    } catch (e) {
+      console.error('API Error', e)
+      // Fallback to localStorage
+      const broadcast = {
+        id: `bc_${Date.now()}`,
+        message: broadcastMessage.trim(),
+        time: new Date().toISOString(),
+        from: 'admin'
+      }
+      const existing = JSON.parse(localStorage.getItem('adminBroadcasts') || '[]')
+      existing.unshift(broadcast)
+      localStorage.setItem('adminBroadcasts', JSON.stringify(existing))
+      setBroadcasts([broadcast, ...broadcasts])
+      setBroadcastMessage('')
+      setBroadcastSent(true)
+      setTimeout(() => setBroadcastSent(false), 3000)
     }
-    const existing = JSON.parse(localStorage.getItem('adminBroadcasts') || '[]')
-    existing.unshift(broadcast)
-    localStorage.setItem('adminBroadcasts', JSON.stringify(existing))
-    setBroadcastMessage('')
-    setBroadcastSent(true)
-    setTimeout(() => setBroadcastSent(false), 3000)
-    setBroadcasts([broadcast, ...existing])
-    addSystemLog('Sent broadcast')
   }
 
-  const handleDeleteBroadcast = (id) => {
-      if(!confirm('ลบประกาศ?')) return
+  const handleDeleteBroadcast = async (id) => {
+    if(!confirm('ลบประกาศ?')) return
+    
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/status/broadcasts/${id}`, {
+        method: 'DELETE',
+        headers: getHeaders(false),
+        credentials: 'include'
+      })
+      
+      if (res.ok) {
+        setBroadcasts(prev => prev.filter(b => b.id !== id))
+      } else {
+        alert('Failed to delete broadcast')
+      }
+    } catch (e) {
+      console.error('API Error, falling back to localStorage', e)
       const updated = broadcasts.filter(b => b.id !== id)
       setBroadcasts(updated)
       localStorage.setItem('adminBroadcasts', JSON.stringify(updated))
+    }
   }
 
   // --- Filtering & Pagination ---

@@ -361,6 +361,282 @@ const auditOps = {
 };
 
 // ============================================
+// Reports Operations
+// ============================================
+
+const reportsOps = {
+  /**
+   * Get all reports with optional filters
+   */
+  getAll(options = {}) {
+    let query = 'SELECT * FROM reports';
+    const params = [];
+    const conditions = [];
+    
+    if (options.type) {
+      conditions.push('type = ?');
+      params.push(options.type);
+    }
+    if (options.verified !== undefined) {
+      conditions.push('verified = ?');
+      params.push(options.verified ? 1 : 0);
+    }
+    
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+    
+    query += ' ORDER BY created_at DESC';
+    
+    if (options.limit) {
+      query += ' LIMIT ?';
+      params.push(options.limit);
+    }
+    
+    const stmt = db.prepare(query);
+    return stmt.all(...params);
+  },
+
+  /**
+   * Get report by ID
+   */
+  getById(id) {
+    const stmt = db.prepare('SELECT * FROM reports WHERE id = ?');
+    return stmt.get(id);
+  },
+
+  /**
+   * Create a new report
+   */
+  create(report) {
+    const stmt = db.prepare(`
+      INSERT INTO reports (id, type, location, lat, lng, province, district, subdistrict, description, ip_address, verified, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(
+      report.id,
+      report.type,
+      report.location,
+      report.lat,
+      report.lng,
+      report.province,
+      report.district,
+      report.subdistrict,
+      report.description,
+      report.ip,
+      report.verified ? 1 : 0,
+      report.time || new Date().toISOString()
+    );
+    return report;
+  },
+
+  /**
+   * Update report
+   */
+  update(id, updates) {
+    const fields = [];
+    const params = [];
+    
+    if (updates.type !== undefined) { fields.push('type = ?'); params.push(updates.type); }
+    if (updates.location !== undefined) { fields.push('location = ?'); params.push(updates.location); }
+    if (updates.description !== undefined) { fields.push('description = ?'); params.push(updates.description); }
+    if (updates.verified !== undefined) { fields.push('verified = ?'); params.push(updates.verified ? 1 : 0); }
+    
+    fields.push('updated_at = ?');
+    params.push(new Date().toISOString());
+    params.push(id);
+    
+    const stmt = db.prepare(`UPDATE reports SET ${fields.join(', ')} WHERE id = ?`);
+    return stmt.run(...params).changes > 0;
+  },
+
+  /**
+   * Delete report
+   */
+  delete(id) {
+    const stmt = db.prepare('DELETE FROM reports WHERE id = ?');
+    return stmt.run(id).changes > 0;
+  },
+
+  /**
+   * Get count
+   */
+  count() {
+    const stmt = db.prepare('SELECT COUNT(*) as count FROM reports');
+    return stmt.get().count;
+  }
+};
+
+// ============================================
+// Broadcasts Operations
+// ============================================
+
+const broadcastsOps = {
+  /**
+   * Get all broadcasts
+   */
+  getAll(limit = 100) {
+    const stmt = db.prepare('SELECT * FROM broadcasts ORDER BY created_at DESC LIMIT ?');
+    return stmt.all(limit);
+  },
+
+  /**
+   * Create broadcast
+   */
+  create(broadcast) {
+    const stmt = db.prepare(`
+      INSERT INTO broadcasts (id, message, from_user, created_at)
+      VALUES (?, ?, ?, ?)
+    `);
+    stmt.run(
+      broadcast.id,
+      broadcast.message,
+      broadcast.from || 'admin',
+      broadcast.time || new Date().toISOString()
+    );
+    return broadcast;
+  },
+
+  /**
+   * Delete broadcast
+   */
+  delete(id) {
+    const stmt = db.prepare('DELETE FROM broadcasts WHERE id = ?');
+    return stmt.run(id).changes > 0;
+  }
+};
+
+// ============================================
+// System Settings Operations
+// ============================================
+
+const settingsOps = {
+  /**
+   * Get setting value
+   */
+  get(key) {
+    const stmt = db.prepare('SELECT value FROM system_settings WHERE key = ?');
+    const result = stmt.get(key);
+    return result ? result.value : null;
+  },
+
+  /**
+   * Set setting value
+   */
+  set(key, value) {
+    const stmt = db.prepare(`
+      INSERT INTO system_settings (key, value, updated_at)
+      VALUES (?, ?, datetime('now'))
+      ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = datetime('now')
+    `);
+    stmt.run(key, value, value);
+  }
+};
+
+// ============================================
+// App Logs Operations (For Admin Dashboard)
+// ============================================
+
+const appLogsOps = {
+  /**
+   * Add log entry
+   */
+  add(level, category, message, metadata = {}, ip = null) {
+    const stmt = db.prepare(`
+      INSERT INTO app_logs (level, category, message, metadata, ip)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    const metadataStr = typeof metadata === 'object' ? JSON.stringify(metadata) : metadata;
+    stmt.run(level, category, message, metadataStr, ip);
+  },
+
+  /**
+   * Get logs with filtering
+   */
+  getLogs(options = {}) {
+    let query = 'SELECT * FROM app_logs';
+    const params = [];
+    const conditions = [];
+    
+    if (options.level) {
+      conditions.push('level = ?');
+      params.push(options.level);
+    }
+    if (options.category) {
+      conditions.push('category = ?');
+      params.push(options.category);
+    }
+    if (options.since) {
+      conditions.push('created_at >= ?');
+      params.push(options.since);
+    }
+    if (options.search) {
+      conditions.push('(message LIKE ? OR metadata LIKE ?)');
+      params.push(`%${options.search}%`, `%${options.search}%`);
+    }
+    
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+    
+    query += ' ORDER BY created_at DESC';
+    query += ` LIMIT ${options.limit || 200}`;
+    
+    const stmt = db.prepare(query);
+    return stmt.all(...params).map(log => ({
+      ...log,
+      metadata: log.metadata ? JSON.parse(log.metadata) : {}
+    }));
+  },
+
+  /**
+   * Get stats
+   */
+  getStats() {
+    const total = db.prepare('SELECT COUNT(*) as count FROM app_logs').get().count;
+    const lastHour = db.prepare(`
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN level = 'ERROR' THEN 1 ELSE 0 END) as errors,
+        SUM(CASE WHEN level = 'SECURITY' THEN 1 ELSE 0 END) as security
+      FROM app_logs 
+      WHERE created_at >= datetime('now', '-1 hour')
+    `).get();
+    
+    const last24Hours = db.prepare(`
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN level = 'ERROR' THEN 1 ELSE 0 END) as errors,
+        SUM(CASE WHEN level = 'SECURITY' THEN 1 ELSE 0 END) as security
+      FROM app_logs 
+      WHERE created_at >= datetime('now', '-1 day')
+    `).get();
+    
+    return {
+      total,
+      lastHour: { total: lastHour.total, errors: lastHour.errors || 0, security: lastHour.security || 0 },
+      last24Hours: { total: last24Hours.total, errors: last24Hours.errors || 0, security: last24Hours.security || 0 }
+    };
+  },
+
+  /**
+   * Clear all logs
+   */
+  clear() {
+    const stmt = db.prepare('DELETE FROM app_logs');
+    stmt.run();
+  },
+
+  /**
+   * Cleanup old logs
+   */
+  cleanup(daysToKeep = 30) {
+    const stmt = db.prepare(`DELETE FROM app_logs WHERE created_at < datetime('now', '-' || ? || ' days')`);
+    return stmt.run(daysToKeep).changes;
+  }
+};
+
+// ============================================
 // Cleanup Job
 // ============================================
 
@@ -374,9 +650,10 @@ function startCleanupJob() {
       const ipsCleaned = blockedIPsOps.cleanup();
       const attemptsCleaned = loginAttemptsOps.cleanup();
       const logsCleaned = auditOps.cleanup();
+      const appLogsCleaned = appLogsOps.cleanup();
       
-      if (tokensCleaned + ipsCleaned + attemptsCleaned + logsCleaned > 0) {
-        console.log(`[DATABASE] 🧹 Cleanup: tokens=${tokensCleaned}, ips=${ipsCleaned}, attempts=${attemptsCleaned}, logs=${logsCleaned}`);
+      if (tokensCleaned + ipsCleaned + attemptsCleaned + logsCleaned + appLogsCleaned > 0) {
+        console.log(`[DATABASE] 🧹 Cleanup: tokens=${tokensCleaned}, ips=${ipsCleaned}, attempts=${attemptsCleaned}, logs=${logsCleaned}, appLogs=${appLogsCleaned}`);
       }
     } catch (error) {
       console.error('[DATABASE] Cleanup error:', error.message);
@@ -414,6 +691,10 @@ module.exports = {
   blockedIPsOps,
   loginAttemptsOps,
   auditOps,
+  reportsOps,
+  broadcastsOps,
+  settingsOps,
+  appLogsOps,
   startCleanupJob,
   stopCleanupJob
 };

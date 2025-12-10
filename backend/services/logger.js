@@ -1,11 +1,24 @@
 /**
  * Admin Logger Service
  * 
- * Stores logs in memory for admin viewing
- * In production, would use a database or file storage
+ * Stores logs in SQLite database for persistence
+ * Falls back to console if database not available
  */
 
-const MAX_LOGS = 500; // Maximum logs to keep in memory
+let appLogsOps = null;
+
+// Try to load database - may not be available during initialization
+function getAppLogsOps() {
+  if (!appLogsOps) {
+    try {
+      const db = require('./database');
+      appLogsOps = db.appLogsOps;
+    } catch (e) {
+      // Database not yet initialized, will use console only
+    }
+  }
+  return appLogsOps;
+}
 
 // Log levels
 const LOG_LEVELS = {
@@ -15,9 +28,6 @@ const LOG_LEVELS = {
   ERROR: 'ERROR',
   SECURITY: 'SECURITY'
 };
-
-// In-memory log storage
-const logs = [];
 
 /**
  * Add a log entry
@@ -37,12 +47,14 @@ function addLog(level, category, message, metadata = {}) {
     ip: metadata.ip || null
   };
   
-  // Add to beginning of array
-  logs.unshift(logEntry);
-  
-  // Trim if exceeds max
-  if (logs.length > MAX_LOGS) {
-    logs.pop();
+  // Try to store in database
+  const ops = getAppLogsOps();
+  if (ops) {
+    try {
+      ops.add(level, category, message, metadata, metadata.ip || null);
+    } catch (e) {
+      // Database write failed, continue to console
+    }
   }
   
   // Also log to console with color
@@ -93,68 +105,42 @@ function security(category, message, metadata = {}) {
  * @returns {array} Filtered logs
  */
 function getLogs(options = {}) {
-  let result = [...logs];
-  
-  // Filter by level
-  if (options.level) {
-    result = result.filter(log => log.level === options.level);
+  const ops = getAppLogsOps();
+  if (ops) {
+    try {
+      const logs = ops.getLogs(options);
+      return logs.map(log => ({
+        id: `log_${log.id}`,
+        timestamp: log.created_at,
+        level: log.level,
+        category: log.category,
+        message: log.message,
+        metadata: log.metadata,
+        ip: log.ip
+      }));
+    } catch (e) {
+      console.error('[LOGGER] Failed to get logs from DB:', e.message);
+    }
   }
-  
-  // Filter by category
-  if (options.category) {
-    result = result.filter(log => log.category === options.category);
-  }
-  
-  // Filter by time range
-  if (options.since) {
-    const sinceDate = new Date(options.since);
-    result = result.filter(log => new Date(log.timestamp) >= sinceDate);
-  }
-  
-  // Search in message
-  if (options.search) {
-    const searchLower = options.search.toLowerCase();
-    result = result.filter(log => 
-      log.message.toLowerCase().includes(searchLower) ||
-      JSON.stringify(log.metadata).toLowerCase().includes(searchLower)
-    );
-  }
-  
-  // Limit results
-  if (options.limit) {
-    result = result.slice(0, options.limit);
-  }
-  
-  return result;
+  return [];
 }
 
 /**
  * Get log statistics
  */
 function getStats() {
-  const now = new Date();
-  const oneHourAgo = new Date(now - 60 * 60 * 1000);
-  const oneDayAgo = new Date(now - 24 * 60 * 60 * 1000);
-  
-  const recentLogs = logs.filter(log => new Date(log.timestamp) >= oneHourAgo);
-  const dailyLogs = logs.filter(log => new Date(log.timestamp) >= oneDayAgo);
-  
-  return {
-    total: logs.length,
-    lastHour: {
-      total: recentLogs.length,
-      errors: recentLogs.filter(l => l.level === 'ERROR').length,
-      security: recentLogs.filter(l => l.level === 'SECURITY').length
-    },
-    last24Hours: {
-      total: dailyLogs.length,
-      errors: dailyLogs.filter(l => l.level === 'ERROR').length,
-      security: dailyLogs.filter(l => l.level === 'SECURITY').length,
-      byCategory: dailyLogs.reduce((acc, log) => {
-        acc[log.category] = (acc[log.category] || 0) + 1;
-        return acc;
-      }, {})
+  const ops = getAppLogsOps();
+  if (ops) {
+    try {
+      return ops.getStats();
+    } catch (e) {
+      console.error('[LOGGER] Failed to get stats from DB:', e.message);
     }
+  }
+  return {
+    total: 0,
+    lastHour: { total: 0, errors: 0, security: 0 },
+    last24Hours: { total: 0, errors: 0, security: 0 }
   };
 }
 
@@ -162,8 +148,15 @@ function getStats() {
  * Clear all logs (admin action)
  */
 function clearLogs() {
-  logs.length = 0;
-  info('SYSTEM', 'Logs cleared by admin');
+  const ops = getAppLogsOps();
+  if (ops) {
+    try {
+      ops.clear();
+      info('SYSTEM', 'Logs cleared by admin');
+    } catch (e) {
+      console.error('[LOGGER] Failed to clear logs:', e.message);
+    }
+  }
 }
 
 module.exports = {

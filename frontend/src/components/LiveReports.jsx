@@ -1,9 +1,15 @@
 import { useState, useEffect } from 'react'
 import { Radio, CheckCircle, AlertCircle, RefreshCw, MapPin, ExternalLink } from 'lucide-react'
 
+// API Base - Dynamic for mobile compatibility
+const API_BASE = import.meta.env.VITE_API_URL || 
+  (window.location.hostname === 'localhost' 
+    ? 'http://localhost:3001' 
+    : `http://${window.location.hostname}:3001`)
+
 /**
  * LiveReports Component
- * ดึงรายงานจาก API จริง
+ * ดึงรายงานจาก API จริง - sync ทุกอุปกรณ์
  */
 export default function LiveReports({ userLocation = null }) {
   const [reports, setReports] = useState([])
@@ -16,19 +22,25 @@ export default function LiveReports({ userLocation = null }) {
     setError(null)
     
     try {
-      // Load from localStorage - ดึงข้อมูลจาก userReports ที่เก็บไว้
-      const userReports = JSON.parse(localStorage.getItem('userReports') || '[]')
+      // ดึงรายงานที่ยืนยันแล้วจาก API
+      const res = await fetch(`${API_BASE}/api/v1/reports?verified=true`, {
+        credentials: 'include'
+      })
       
-      // Filter to show only last 24 hours and verified or recent reports
-      const now = new Date()
-      const filtered = userReports.filter(r => {
-        const reportTime = new Date(r.time)
-        return (now - reportTime) < 24 * 60 * 60 * 1000 && r.verified === true
-      }).slice(0, 20) // Limit to 20 most recent
-      
-      setReports(filtered)
-      setLastFetch(new Date())
-      
+      if (res.ok) {
+        const data = await res.json()
+        // Filter to last 24 hours
+        const now = new Date()
+        const filtered = (data.reports || []).filter(r => {
+          const reportTime = new Date(r.time)
+          return (now - reportTime) < 24 * 60 * 60 * 1000
+        }).slice(0, 20)
+        
+        setReports(filtered)
+        setLastFetch(new Date())
+      } else {
+        throw new Error('API Error')
+      }
     } catch (err) {
       console.error('Error loading reports:', err)
       setError('ไม่สามารถโหลดรายงานได้')

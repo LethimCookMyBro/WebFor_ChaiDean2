@@ -97,9 +97,39 @@ CREATE TABLE IF NOT EXISTS broadcasts (
 );
 
 -- ============================================
+-- System Settings (Threat Level, etc.)
+-- ============================================
+CREATE TABLE IF NOT EXISTS system_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Initialize default threat level
+INSERT OR IGNORE INTO system_settings (key, value) VALUES ('threat_level', 'YELLOW');
+
+-- ============================================
+-- Application Logs (For Admin Dashboard)
+-- ============================================
+CREATE TABLE IF NOT EXISTS app_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  level TEXT NOT NULL,
+  category TEXT NOT NULL,
+  message TEXT NOT NULL,
+  metadata TEXT,
+  ip TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_app_logs_level ON app_logs(level);
+CREATE INDEX IF NOT EXISTS idx_app_logs_category ON app_logs(category);
+CREATE INDEX IF NOT EXISTS idx_app_logs_created ON app_logs(created_at DESC);
+
+-- ============================================
 -- Cleanup: Remove expired entries periodically
 -- ============================================
 -- Run this periodically:
 -- DELETE FROM token_blacklist WHERE expires_at < datetime('now');
 -- DELETE FROM blocked_ips WHERE expires_at IS NOT NULL AND expires_at < datetime('now');
 -- DELETE FROM login_attempts WHERE locked_until IS NOT NULL AND locked_until < datetime('now');
+-- DELETE FROM app_logs WHERE created_at < datetime('now', '-30 days');

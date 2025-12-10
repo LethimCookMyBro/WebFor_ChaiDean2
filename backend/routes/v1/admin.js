@@ -2,15 +2,15 @@
  * Admin API Routes
  * 
  * Endpoints for admin functions:
- * - Logs management
- * - IP blocking (server-side)
+ * - Logs management (persistent)
+ * - IP blocking (persistent via database)
  * 
  * Protected by requireAuth + requireAdmin middleware
  */
 
 const express = require('express');
 const router = express.Router();
-const logger = require('../../services/logger');
+const { blockedIPsOps, appLogsOps } = require('../../services/database');
 const { requireAuth, requireAdmin } = require('../../middleware/auth');
 
 // Apply auth middleware to all admin routes
@@ -18,11 +18,8 @@ router.use(requireAuth);
 router.use(requireAdmin);
 
 // ============================================
-// Blocked IPs Store (In-Memory)
-// In production, use Redis or Database
+// Blocked IPs Functions (Using Database)
 // ============================================
-
-const blockedIPs = new Map(); // Map<ip, { reason, blockedAt, blockedBy, expiresAt? }>
 
 /**
  * Check if an IP is blocked
@@ -30,16 +27,7 @@ const blockedIPs = new Map(); // Map<ip, { reason, blockedAt, blockedBy, expires
  * @returns {boolean}
  */
 function isIPBlocked(ip) {
-  const record = blockedIPs.get(ip);
-  if (!record) return false;
-  
-  // Check expiry
-  if (record.expiresAt && Date.now() > record.expiresAt) {
-    blockedIPs.delete(ip);
-    return false;
-  }
-  
-  return true;
+  return blockedIPsOps.isBlocked(ip);
 }
 
 /**
@@ -48,19 +36,11 @@ function isIPBlocked(ip) {
  * @returns {object|null}
  */
 function getBlockedIPInfo(ip) {
-  const record = blockedIPs.get(ip);
-  if (!record) return null;
-  
-  if (record.expiresAt && Date.now() > record.expiresAt) {
-    blockedIPs.delete(ip);
-    return null;
-  }
-  
-  return { ip, ...record };
+  return blockedIPsOps.getInfo(ip);
 }
 
 // ============================================
-// Logs Routes
+// Logs Routes (Using Database)
 // ============================================
 
 /**
@@ -78,15 +58,26 @@ router.get('/logs', (req, res) => {
     if (search) options.search = search;
     if (limit) options.limit = parseInt(limit, 10);
     
-    const logs = logger.getLogs(options);
+    const logs = appLogsOps.getLogs(options);
+    
+    // Format for frontend compatibility
+    const formattedLogs = logs.map(log => ({
+      id: `log_${log.id}`,
+      timestamp: log.created_at,
+      level: log.level,
+      category: log.category,
+      message: log.message,
+      metadata: log.metadata,
+      ip: log.ip
+    }));
     
     res.json({
       success: true,
-      count: logs.length,
-      logs
+      count: formattedLogs.length,
+      logs: formattedLogs
     });
   } catch (error) {
-    logger.error('ADMIN', 'Failed to get logs', { error: error.message });
+    console.error('[ADMIN] Failed to get logs:', error.message);
     res.status(500).json({ error: 'Failed to get logs' });
   }
 });
@@ -97,13 +88,13 @@ router.get('/logs', (req, res) => {
  */
 router.get('/logs/stats', (req, res) => {
   try {
-    const stats = logger.getStats();
+    const stats = appLogsOps.getStats();
     res.json({
       success: true,
       stats
     });
   } catch (error) {
-    logger.error('ADMIN', 'Failed to get log stats', { error: error.message });
+    console.error('[ADMIN] Failed to get log stats:', error.message);
     res.status(500).json({ error: 'Failed to get stats' });
   }
 });
@@ -114,16 +105,20 @@ router.get('/logs/stats', (req, res) => {
  */
 router.delete('/logs', (req, res) => {
   try {
-    logger.clearLogs();
-    logger.security('ADMIN', 'Logs cleared', { ip: req.clientIp || req.ip });
+    appLogsOps.clear();
+    
+    // Log this action
+    appLogsOps.add('SECURITY', 'ADMIN', 'Logs cleared by admin', { ip: req.clientIp || req.ip });
+    
     res.json({ success: true, message: 'Logs cleared' });
   } catch (error) {
+    console.error('[ADMIN] Failed to clear logs:', error.message);
     res.status(500).json({ error: 'Failed to clear logs' });
   }
 });
 
 // ============================================
-// IP Blocking Routes
+// IP Blocking Routes (Using Database)
 // ============================================
 
 /**
@@ -132,32 +127,24 @@ router.delete('/logs', (req, res) => {
  */
 router.get('/blocked-ips', (req, res) => {
   try {
-    const ips = [];
-    const now = Date.now();
+    const ips = blockedIPsOps.getAll();
     
-    for (const [ip, record] of blockedIPs.entries()) {
-      // Skip expired
-      if (record.expiresAt && now > record.expiresAt) {
-        blockedIPs.delete(ip);
-        continue;
-      }
-      
-      ips.push({
-        ip,
-        reason: record.reason,
-        blockedAt: record.blockedAt,
-        blockedBy: record.blockedBy,
-        expiresAt: record.expiresAt || null,
-        permanent: !record.expiresAt
-      });
-    }
+    const formattedIPs = ips.map(record => ({
+      ip: record.ip,
+      reason: record.reason,
+      blockedAt: record.created_at,
+      blockedBy: record.blocked_by,
+      expiresAt: record.expires_at || null,
+      permanent: !record.expires_at
+    }));
     
     res.json({
       success: true,
-      count: ips.length,
-      blockedIPs: ips
+      count: formattedIPs.length,
+      blockedIPs: formattedIPs
     });
   } catch (error) {
+    console.error('[ADMIN] Failed to get blocked IPs:', error.message);
     res.status(500).json({ error: 'Failed to get blocked IPs' });
   }
 });
@@ -189,38 +176,44 @@ router.post('/blocked-ips', (req, res) => {
     }
     
     // Check if already blocked
-    if (blockedIPs.has(cleanIP)) {
+    if (blockedIPsOps.isBlocked(cleanIP)) {
       return res.status(409).json({ error: 'IP already blocked' });
     }
     
-    // Create block record
-    const record = {
-      reason: reason || 'Manual block by admin',
-      blockedAt: new Date().toISOString(),
-      blockedBy: req.user?.username || 'admin'
-    };
-    
-    // Set expiry if duration provided (in hours)
+    // Calculate expiry
+    let expiresAt = null;
     if (duration && typeof duration === 'number' && duration > 0) {
-      record.expiresAt = Date.now() + (duration * 60 * 60 * 1000);
+      expiresAt = new Date(Date.now() + (duration * 60 * 60 * 1000)).toISOString();
     }
     
-    blockedIPs.set(cleanIP, record);
+    const blockedBy = req.user?.username || 'admin';
+    const blockReason = reason || 'Manual block by admin';
     
-    logger.security('ADMIN', `IP blocked: ${cleanIP}`, { 
+    blockedIPsOps.block(cleanIP, blockReason, blockedBy, expiresAt);
+    
+    // Log this action
+    appLogsOps.add('SECURITY', 'ADMIN', `IP blocked: ${cleanIP}`, { 
       ip: cleanIP, 
-      reason: record.reason,
-      blockedBy: record.blockedBy 
+      reason: blockReason,
+      blockedBy 
     });
     
-    console.log(`[SECURITY] ❌ IP blocked: ${cleanIP} by ${record.blockedBy}`);
+    console.log(`[SECURITY] ❌ IP blocked: ${cleanIP} by ${blockedBy}`);
     
     res.json({
       success: true,
       message: `IP ${cleanIP} blocked successfully`,
-      record: { ip: cleanIP, ...record }
+      record: { 
+        ip: cleanIP, 
+        reason: blockReason,
+        blockedBy,
+        blockedAt: new Date().toISOString(),
+        expiresAt,
+        permanent: !expiresAt
+      }
     });
   } catch (error) {
+    console.error('[ADMIN] Failed to block IP:', error.message);
     res.status(500).json({ error: 'Failed to block IP' });
   }
 });
@@ -233,13 +226,13 @@ router.delete('/blocked-ips/:ip', (req, res) => {
   try {
     const ip = req.params.ip;
     
-    if (!blockedIPs.has(ip)) {
+    const unblocked = blockedIPsOps.unblock(ip);
+    if (!unblocked) {
       return res.status(404).json({ error: 'IP not found in blocked list' });
     }
     
-    blockedIPs.delete(ip);
-    
-    logger.security('ADMIN', `IP unblocked: ${ip}`, { 
+    // Log this action
+    appLogsOps.add('SECURITY', 'ADMIN', `IP unblocked: ${ip}`, { 
       ip, 
       unblockedBy: req.user?.username || 'admin' 
     });
@@ -251,6 +244,7 @@ router.delete('/blocked-ips/:ip', (req, res) => {
       message: `IP ${ip} unblocked successfully`
     });
   } catch (error) {
+    console.error('[ADMIN] Failed to unblock IP:', error.message);
     res.status(500).json({ error: 'Failed to unblock IP' });
   }
 });
@@ -259,5 +253,3 @@ router.delete('/blocked-ips/:ip', (req, res) => {
 module.exports = router;
 module.exports.isIPBlocked = isIPBlocked;
 module.exports.getBlockedIPInfo = getBlockedIPInfo;
-module.exports.blockedIPs = blockedIPs;
-
