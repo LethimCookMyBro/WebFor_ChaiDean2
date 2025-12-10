@@ -1,4 +1,4 @@
-# Force rebuild v3 - Fix better-sqlite3
+# Force rebuild v4 - Fix npm install
 # Multi-stage Dockerfile for Border Safety - Railway Optimized
 
 # ============================================
@@ -7,7 +7,7 @@
 FROM node:20-alpine AS frontend-build
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
-RUN npm ci --silent
+RUN npm install --silent
 COPY frontend/ ./
 RUN npm run build
 
@@ -24,7 +24,7 @@ RUN apk add --no-cache python3 make g++ sqlite
 COPY backend/package*.json ./
 
 # Install dependencies
-RUN npm ci --silent
+RUN npm install --silent
 
 # Rebuild better-sqlite3 native module
 RUN npm rebuild better-sqlite3 || echo "Rebuild attempted"
