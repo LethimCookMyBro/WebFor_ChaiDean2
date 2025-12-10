@@ -131,24 +131,35 @@ router.post('/admin/login', async (req, res) => {
       return res.status(401).json({ error: 'Unauthorized', message: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' });
     }
     
-    // Security Checks
-    if (isProduction && !adminPasswordHash) {
-      console.error('[SECURITY] ❌ CRITICAL: ADMIN_PASSWORD_HASH not set in production!');
-      return res.status(503).json({ error: 'Service Unavailable', message: 'Admin auth config error' });
+    // Security Checks - Always require ADMIN_PASSWORD_HASH
+    if (!adminPasswordHash) {
+      if (isProduction) {
+        console.error('[SECURITY] ❌ CRITICAL: ADMIN_PASSWORD_HASH not set in production!');
+        return res.status(503).json({ error: 'Service Unavailable', message: 'Admin auth config error' });
+      } else {
+        // Development: Generate a hash hint
+        console.error('[SECURITY] ❌ ADMIN_PASSWORD_HASH not set!');
+        console.error('[SECURITY] Generate one with: node -e "require(\'bcryptjs\').hash(\'your-password\', 12).then(console.log)"');
+        return res.status(503).json({ 
+          error: 'Service Unavailable', 
+          message: 'ADMIN_PASSWORD_HASH not configured. Check server logs.' 
+        });
+      }
     }
     
-    const DEV_PASSWORD = 'Trat_forTestJang$_+190';
-    let isValidPassword = false;
+    // DEBUG: Log hash info (remove in production)
+    console.log('[DEBUG] Admin login attempt:', { 
+      username, 
+      hashExists: !!adminPasswordHash,
+      hashLength: adminPasswordHash?.length,
+      hashPrefix: adminPasswordHash?.substring(0, 10)
+    });
     
-    if (!isProduction && (password === DEV_PASSWORD)) {
-      isValidPassword = true;
-      console.warn('[AUTH] ⚠️ Admin login using DEVELOPMENT credentials');
-    } else if (adminPasswordHash) {
-      isValidPassword = await verifyPassword(password, adminPasswordHash);
-    } else if (!isProduction) {
-        // Fallback for dev if hash not set
-        isValidPassword = password === DEV_PASSWORD;
-    }
+    // Verify password using bcrypt only - no plaintext fallback
+    const isValidPassword = await verifyPassword(password, adminPasswordHash);
+    
+    // DEBUG: Log result
+    console.log('[DEBUG] Password verification result:', isValidPassword);
     
     if (!isValidPassword) {
       const result = recordLoginAttempt(identifier, false);

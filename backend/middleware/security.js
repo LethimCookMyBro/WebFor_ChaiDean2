@@ -2,7 +2,7 @@
  * Security Middleware
  * 
  * Provides rate limiting, request sanitization, and security utilities
- * with SQL injection detection and enhanced validation
+ * with comprehensive attack detection and enhanced validation
  */
 
 // Simple in-memory rate limiter (for production use Redis)
@@ -15,12 +15,17 @@ const SQL_INJECTION_PATTERNS = [
   /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER|CREATE|TRUNCATE)\b.*\b(FROM|INTO|TABLE|DATABASE)\b)/i,
   /(\bOR\b\s+[\d'"]?\s*=\s*[\d'"]\s*)/i, // OR 1=1, OR '1'='1'
   /(\bAND\b\s+[\d'"]?\s*=\s*[\d'"]\s*)/i,
-  /(--|\#|\/\*|\*\/)/,  // SQL comments
+  /(--|#|\/\*|\*\/)/,  // SQL comments
   /(\bEXEC\b|\bEXECUTE\b)/i,
   /(\bDROP\b\s+\bTABLE\b)/i,
   /(0x[0-9a-fA-F]+)/,  // Hex encoded
   /(\bCHAR\s*\(\s*\d+\s*\))/i,  // CHAR() function
-  /(\bCONCAT\s*\()/i  // CONCAT function
+  /(\bCONCAT\s*\()/i,  // CONCAT function
+  /(\bWAITFOR\b\s+\bDELAY\b)/i,  // Time-based SQLi
+  /(\bBENCHMARK\s*\()/i,  // MySQL benchmark
+  /(\bSLEEP\s*\()/i,  // MySQL sleep
+  /(\bLOAD_FILE\s*\()/i,  // File read
+  /(\bINTO\s+OUTFILE\b)/i,  // File write
 ];
 
 // XSS patterns to detect
@@ -31,8 +36,66 @@ const XSS_PATTERNS = [
   /<iframe/gi,
   /<object/gi,
   /<embed/gi,
-  /<svg.*?onload/gi
+  /<svg.*?onload/gi,
+  /data:\s*text\/html/gi,  // data: URLs
+  /vbscript:/gi,
+  /expression\s*\(/gi,  // CSS expressions
+  /<img[^>]+onerror/gi,
+  /<body[^>]+onload/gi,
 ];
+
+// NoSQL injection patterns (MongoDB etc)
+const NOSQL_INJECTION_PATTERNS = [
+  /\$where\s*:/i,
+  /\$gt\s*:/i,
+  /\$lt\s*:/i,
+  /\$ne\s*:/i,
+  /\$nin\s*:/i,
+  /\$or\s*:\s*\[/i,
+  /\$and\s*:\s*\[/i,
+  /\$regex\s*:/i,
+  /\{\s*"\$[a-z]+"/i,  // Generic $ operator
+];
+
+// Path traversal patterns
+const PATH_TRAVERSAL_PATTERNS = [
+  /\.\.\//g,
+  /\.\.%2[fF]/g,
+  /\.\.%5[cC]/g,  // URL encoded backslash
+  /\.\.\\/g,
+  /%2e%2e[\\/]/gi,  // Double URL encoded
+  /\.\.%c0%af/gi,  // UTF-8 encoded
+  /\.\.%c1%9c/gi,
+  /\/etc\/passwd/i,
+  /\/proc\/self/i,
+  /c:\\\\windows/i,
+  /boot\.ini/i,
+];
+
+// Command injection patterns
+const COMMAND_INJECTION_PATTERNS = [
+  /[;&|`$]/,  // Shell operators
+  /\$\(/,  // Command substitution
+  /`.*`/,  // Backtick commands
+  /\|\|/,
+  /&&/,
+  /;\s*\w+/,  // Command chaining
+  /\b(cat|ls|dir|rm|del|wget|curl|nc|netcat|bash|sh|cmd|powershell)\b/i,
+  />\s*\/?\w+/,  // Output redirection
+  /2>&1/,
+];
+
+// LDAP injection patterns
+const LDAP_INJECTION_PATTERNS = [
+  /[()\\*]/,  // LDAP special chars
+  /\x00/,  // Null byte
+  /\|\(/,  // OR in LDAP
+  /&\(/,  // AND in LDAP
+];
+
+// Prototype pollution patterns
+const PROTOTYPE_POLLUTION_KEYS = ['__proto__', 'constructor', 'prototype'];
+
 
 /**
  * Rate limiter middleware
@@ -131,6 +194,79 @@ function detectSQLInjection(value) {
 function detectXSS(value) {
   if (typeof value !== 'string') return false;
   return XSS_PATTERNS.some(pattern => pattern.test(value));
+}
+
+/**
+ * Detect NoSQL injection patterns (MongoDB, etc)
+ * @param {string} value - Value to check
+ * @returns {boolean} True if NoSQL injection detected
+ */
+function detectNoSQLInjection(value) {
+  if (typeof value !== 'string') return false;
+  return NOSQL_INJECTION_PATTERNS.some(pattern => pattern.test(value));
+}
+
+/**
+ * Detect path traversal attempts
+ * @param {string} value - Value to check
+ * @returns {boolean} True if path traversal detected
+ */
+function detectPathTraversal(value) {
+  if (typeof value !== 'string') return false;
+  return PATH_TRAVERSAL_PATTERNS.some(pattern => pattern.test(value));
+}
+
+/**
+ * Detect command injection attempts
+ * @param {string} value - Value to check
+ * @returns {boolean} True if command injection detected
+ */
+function detectCommandInjection(value) {
+  if (typeof value !== 'string') return false;
+  // Skip short values that might contain normal punctuation
+  if (value.length < 3) return false;
+  return COMMAND_INJECTION_PATTERNS.some(pattern => pattern.test(value));
+}
+
+/**
+ * Detect LDAP injection attempts
+ * @param {string} value - Value to check
+ * @returns {boolean} True if LDAP injection detected
+ */
+function detectLDAPInjection(value) {
+  if (typeof value !== 'string') return false;
+  return LDAP_INJECTION_PATTERNS.some(pattern => pattern.test(value));
+}
+
+/**
+ * Comprehensive threat detection
+ * @param {string} value - Value to check
+ * @param {string} location - Where the value was found
+ * @returns {string[]} Array of detected threat types
+ */
+function detectAllThreats(value, location = '') {
+  const threats = [];
+  
+  if (detectSQLInjection(value)) {
+    threats.push(`sql_injection:${location}`);
+  }
+  if (detectXSS(value)) {
+    threats.push(`xss_attempt:${location}`);
+  }
+  if (detectNoSQLInjection(value)) {
+    threats.push(`nosql_injection:${location}`);
+  }
+  if (detectPathTraversal(value)) {
+    threats.push(`path_traversal:${location}`);
+  }
+  if (detectCommandInjection(value)) {
+    threats.push(`command_injection:${location}`);
+  }
+  if (detectLDAPInjection(value)) {
+    threats.push(`ldap_injection:${location}`);
+  }
+  
+  return threats;
 }
 
 /**
@@ -439,19 +575,34 @@ function sanitizeOutput(data) {
 }
 
 module.exports = {
+  // Rate Limiting
   rateLimiter,
   authRateLimiter,
+  
+  // Request Sanitization
   sanitizeRequest,
+  sanitizeOutput,
+  
+  // Validation
   validateCoordinates,
   validateIP,
+  
+  // Attack Detection
   detectSQLInjection,
   detectXSS,
+  detectNoSQLInjection,
+  detectPathTraversal,
+  detectCommandInjection,
+  detectLDAPInjection,
+  detectAllThreats,
+  
   // CSRF Protection
   generateCSRFToken,
   validateCSRFToken,
   csrfProtection,
+  
   // Output Encoding
   escapeHtml,
-  escapeJs,
-  sanitizeOutput
+  escapeJs
 };
+

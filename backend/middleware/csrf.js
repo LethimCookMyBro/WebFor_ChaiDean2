@@ -13,11 +13,14 @@ const CSRF_TOKEN_LENGTH = 32;
 // Methods that require CSRF validation
 const PROTECTED_METHODS = ['POST', 'PUT', 'DELETE', 'PATCH'];
 
-// Paths exempt from CSRF (webhooks, public APIs)
+// Paths exempt from CSRF (webhooks, public APIs, auth)
 const EXEMPT_PATHS = [
   '/api/health',
-  '/api/v1/auth/login',
-  '/api/v1/auth/admin/login'
+  '/api/v1/auth',        // Full path
+  '/auth',               // Relative path (when mounted at /api/v1)
+  '/admin/login',        // Admin login
+  '/health',             // Health endpoint
+  '/reports',            // Public reports
 ];
 
 /**

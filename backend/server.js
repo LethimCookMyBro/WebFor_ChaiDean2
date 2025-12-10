@@ -17,7 +17,9 @@ const adminRoutes = require('./routes/v1/admin');
 const healthRoutes = require('./routes/health');
 
 const logger = require('./services/logger');
-const { rateLimiter, sanitizeRequest } = require('./middleware/security');
+const { rateLimiter, sanitizeRequest, authRateLimiter } = require('./middleware/security');
+const { csrfTokenMiddleware, csrfValidationMiddleware } = require('./middleware/csrf');
+const { auditMiddleware } = require('./middleware/audit');
 
 const app = express();
 
@@ -26,9 +28,13 @@ app.set('trust proxy', true);
 const PORT = process.env.PORT || 3001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
+// ============================================
+// Security Middleware
+// ============================================
+
 // Helmet
 app.use(helmet({
-  contentSecurityPolicy: false, // For easier dev
+  contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false
 }));
 
@@ -65,21 +71,53 @@ app.use((req, res, next) => {
   next();
 });
 
-// APIs
+// IP Blocking Middleware (In-memory)
+app.use((req, res, next) => {
+  const clientIP = req.clientIp || req.ip;
+  
+  try {
+    const { isIPBlocked, getBlockedIPInfo } = require('./routes/v1/admin');
+    if (isIPBlocked && isIPBlocked(clientIP)) {
+      const info = getBlockedIPInfo(clientIP);
+      console.warn(`[SECURITY] ❌ Blocked request from banned IP: ${clientIP}`);
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Your IP has been blocked',
+        reason: info?.reason || 'Access denied'
+      });
+    }
+  } catch (e) {
+    // Continue if module not loaded yet
+  }
+  
+  next();
+});
+
+// Audit Middleware
+app.use(auditMiddleware);
+
+// CSRF Protection
+app.use('/api', csrfTokenMiddleware);
+app.use('/api/v1', csrfValidationMiddleware);
+
+// ============================================
+// API Routes
+// ============================================
 app.use('/api/health', healthRoutes);
-app.use('/api/v1/auth', rateLimiter, authRoutes); // Admin auth
+app.use('/api/v1/auth', authRateLimiter, authRoutes);
 app.use('/api/v1/locate', rateLimiter, locateRoutes);
 app.use('/api/v1/status', rateLimiter, statusRoutes);
 app.use('/api/v1/geo', rateLimiter, geoRoutes);
 app.use('/api/v1/reports', rateLimiter, reportsRoutes);
-app.use('/api/v1/admin', adminRoutes); // Logs etc.
+app.use('/api/v1/admin', rateLimiter, adminRoutes);
 
 // Root
 app.get('/', (req, res) => {
   res.json({
     status: 'operational',
     service: 'Border Safety API',
-    version: '2.2-noauth'
+    version: '2.3',
+    storage: 'in-memory'
   });
 });
 
@@ -89,9 +127,14 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ error: 'Internal Server Error' });
 });
 
+// ============================================
+// Start Server
+// ============================================
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Trust Proxy: enabled`);
+  console.log(`\n🚀 Server running on port ${PORT}`);
+  console.log(`📊 Storage: In-memory (Docker compatible)`);
+  console.log(`🔒 Security: CSRF, Rate Limiting, IP Blocking enabled`);
+  console.log(`📝 Audit Logging: Console only\n`);
 });
 
 module.exports = app;

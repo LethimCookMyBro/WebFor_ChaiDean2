@@ -40,7 +40,8 @@ export default function CheckTab() {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude, longitude } = pos.coords
-        const distance = getDistanceToBorder(latitude, longitude)
+        const borderResult = getDistanceToBorder(latitude, longitude)
+        const distance = borderResult.distance || borderResult.distanceRounded || borderResult
         const level = getDistanceLevel(distance)
         
         setResult({
@@ -48,7 +49,8 @@ export default function CheckTab() {
           lat: latitude,
           lng: longitude,
           distance,
-          level
+          level,
+          nearestPoint: borderResult.nearestPoint
         })
         setLoading(false)
       },
@@ -73,7 +75,8 @@ export default function CheckTab() {
       return
     }
 
-    const distance = getDistanceToBorder(coords.lat, coords.lng)
+    const borderResult = getDistanceToBorder(coords.lat, coords.lng)
+    const distance = borderResult.distance || borderResult.distanceRounded || borderResult
     const level = getDistanceLevel(distance)
 
     setResult({
@@ -81,7 +84,8 @@ export default function CheckTab() {
       lat: coords.lat,
       lng: coords.lng,
       distance,
-      level
+      level,
+      nearestPoint: borderResult.nearestPoint
     })
     setError(null)
   }

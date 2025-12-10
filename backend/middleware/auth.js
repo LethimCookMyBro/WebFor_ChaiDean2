@@ -242,19 +242,6 @@ async function requireAuth(req, res, next) {
     });
   }
 
-  // STRICT LOGOUT CHECK: Check if user exists in memory (for immediate delete effect)
-  // If user is regular user (has phone) and not found in approvedUsers, reject
-  if (decoded.role !== 'admin' && decoded.phone) {
-    const approvedUsers = global.approvedUsers;
-    // Only check if approvedUsers Map is initialized (it should be)
-    if (approvedUsers && !approvedUsers.has(decoded.phone)) {
-      return res.status(401).json({
-        error: 'Unauthorized',
-        message: 'บัญชีผู้ใช้ถูกลบหรือระงับการใช้งาน'
-      });
-    }
-  }
-
   req.user = decoded;
   req.token = token;
   next();

@@ -76,7 +76,6 @@ export default function AdminDashboard() {
     setLoading(true)
     
     // 1. Fetch Reports - ใช้ localStorage เป็น single source of truth
-    // ไม่ดึงจาก API เพราะจะทำให้เกิด duplicate และ sync issues
     const userReports = JSON.parse(localStorage.getItem('userReports') || '[]')
     setReports(userReports)
 
@@ -84,11 +83,11 @@ export default function AdminDashboard() {
     const broadcastData = JSON.parse(localStorage.getItem('adminBroadcasts') || '[]')
     setBroadcasts(broadcastData)
 
-    // 3. Fetch System Logs - Just load from localStorage, no dummy creation
+    // 3. Fetch System Logs
     const savedLogs = JSON.parse(localStorage.getItem('systemLogs') || '[]')
     setLogs(savedLogs)
     
-    // One-time session init log (using sessionStorage to prevent duplicates)
+    // One-time session init log
     const sessionKey = `admin_init_${new Date().toDateString()}`
     if (!sessionStorage.getItem(sessionKey) && savedLogs.length === 0) {
       sessionStorage.setItem(sessionKey, 'true')
@@ -98,9 +97,20 @@ export default function AdminDashboard() {
       setLogs(updatedLogs)
     }
 
-    // 4. Fetch Security Data
-    const savedBlockedIPs = JSON.parse(localStorage.getItem('blockedIPs') || '[]')
-    setBlockedIPs(savedBlockedIPs)
+    // 4. Fetch Blocked IPs from API
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/blocked-ips`, { credentials: 'include' })
+      if (res.ok) {
+        const data = await res.json()
+        setBlockedIPs(data.blockedIPs || [])
+      }
+    } catch (e) {
+      console.warn('Failed to fetch blocked IPs from API, using localStorage fallback')
+      const savedBlockedIPs = JSON.parse(localStorage.getItem('blockedIPs') || '[]')
+      setBlockedIPs(savedBlockedIPs.map(ip => typeof ip === 'string' ? { ip } : ip))
+    }
+
+    // 5. Fetch Security Logs (still local for now)
     const savedSecLogs = JSON.parse(localStorage.getItem('securityLogs') || '[]')
     setSecurityLogs(savedSecLogs)
 
@@ -300,26 +310,62 @@ export default function AdminDashboard() {
     localStorage.setItem('securityLogs', JSON.stringify(updated))
   }
 
-  const handleBlockIP = (ip) => {
+  const handleBlockIP = async (ip) => {
       if (!ip || ip === 'N/A' || ip === 'unknown') return alert('Invalid IP')
-      if (blockedIPs.includes(ip)) return alert('IP already blocked')
+      const exists = blockedIPs.some(b => (b.ip || b) === ip)
+      if (exists) return alert('IP already blocked')
       if (!confirm(`Block IP: ${ip}?`)) return
 
-      const updated = [...blockedIPs, ip]
-      setBlockedIPs(updated)
-      localStorage.setItem('blockedIPs', JSON.stringify(updated))
-      addSecurityLog(ip, 'blocked', 'Manual block by admin')
-      
-      // Call Backend API to enforce block (Wait for feature)
-      // fetch(`${API_BASE}/api/v1/admin/block-ip`, ...) 
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/admin/blocked-ips`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ ip, reason: 'Manual block by admin' })
+        })
+        
+        if (res.ok) {
+          const data = await res.json()
+          setBlockedIPs(prev => [...prev, data.record])
+          addSecurityLog(ip, 'blocked', 'Manual block by admin (via API)')
+        } else {
+          const err = await res.json()
+          alert(err.error || 'Failed to block IP')
+        }
+      } catch (e) {
+        console.error('API Error, falling back to localStorage', e)
+        // Fallback to localStorage
+        const updated = [...blockedIPs, { ip, blockedAt: new Date().toISOString() }]
+        setBlockedIPs(updated)
+        localStorage.setItem('blockedIPs', JSON.stringify(updated))
+        addSecurityLog(ip, 'blocked', 'Manual block by admin (local)')
+      }
   }
 
-  const handleUnblockIP = (ip) => {
+  const handleUnblockIP = async (ipOrObj) => {
+      const ip = typeof ipOrObj === 'string' ? ipOrObj : ipOrObj.ip
       if (!confirm(`Unblock IP: ${ip}?`)) return
-      const updated = blockedIPs.filter(i => i !== ip)
-      setBlockedIPs(updated)
-      localStorage.setItem('blockedIPs', JSON.stringify(updated))
-      addSecurityLog(ip, 'unblocked', 'Manual unblock by admin')
+      
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/admin/blocked-ips/${ip}`, {
+          method: 'DELETE',
+          credentials: 'include'
+        })
+        
+        if (res.ok) {
+          setBlockedIPs(prev => prev.filter(b => (b.ip || b) !== ip))
+          addSecurityLog(ip, 'unblocked', 'Manual unblock by admin (via API)')
+        } else {
+          const err = await res.json()
+          alert(err.error || 'Failed to unblock IP')
+        }
+      } catch (e) {
+        console.error('API Error, falling back to localStorage', e)
+        const updated = blockedIPs.filter(b => (b.ip || b) !== ip)
+        setBlockedIPs(updated)
+        localStorage.setItem('blockedIPs', JSON.stringify(updated))
+        addSecurityLog(ip, 'unblocked', 'Manual unblock by admin (local)')
+      }
   }
 
   const checkSpamIP = () => {
@@ -851,12 +897,19 @@ export default function AdminDashboard() {
                         </div>
 
                         <div className="max-h-60 overflow-y-auto space-y-2">
-                            {blockedIPs.length === 0 ? <p className="text-center text-slate-400 py-4">ไม่มี IP ที่ถูก Block</p> : blockedIPs.map(ip => (
-                                <div key={ip} className="flex justify-between items-center bg-slate-50 p-2 rounded text-sm border">
-                                    <span className="font-mono text-slate-700">{ip}</span>
-                                    <button onClick={() => handleUnblockIP(ip)} className="text-blue-600 hover:underline text-xs">ปลดล็อค</button>
-                                </div>
-                            ))}
+                            {blockedIPs.length === 0 ? <p className="text-center text-slate-400 py-4">ไม่มี IP ที่ถูก Block</p> : blockedIPs.map((item, idx) => {
+                                const ip = typeof item === 'string' ? item : item.ip
+                                const blockedAt = item.blockedAt ? new Date(item.blockedAt).toLocaleString('th-TH') : ''
+                                return (
+                                    <div key={ip || idx} className="flex justify-between items-center bg-slate-50 p-2 rounded text-sm border">
+                                        <div>
+                                            <span className="font-mono text-slate-700">{ip}</span>
+                                            {blockedAt && <span className="text-xs text-slate-400 ml-2">({blockedAt})</span>}
+                                        </div>
+                                        <button onClick={() => handleUnblockIP(item)} className="text-blue-600 hover:underline text-xs">ปลดล็อค</button>
+                                    </div>
+                                )
+                            })}
                         </div>
                     </div>
 
