@@ -1,132 +1,128 @@
-# 📍 Border Distance Checker
+# 📍 Border Safety
 
-ระบบเช็คระยะจากชายแดนและข้อมูลเตรียมความพร้อมสำหรับพลเรือนในพื้นที่ จ.ตราด
+ระบบเช็คระยะจากชายแดนสำหรับประชาชน จ.ตราด
 
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)
 ![Express](https://img.shields.io/badge/Express-4-000000?logo=express)
+![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite)
 ![Vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite)
-![License](https://img.shields.io/badge/License-MIT-green)
+![Version](https://img.shields.io/badge/Version-2.4-blue)
 
 ---
 
-## 🎯 เป้าหมายของโปรเจกต์
+## 🎯 เกี่ยวกับโปรเจกต์
 
-แอปพลิเคชันนี้พัฒนาขึ้นเพื่อให้ประชาชนในพื้นที่จังหวัดตราดสามารถ:
+- 📍 **ตรวจสอบระยะจากชายแดน** ผ่าน GPS หรือเลือกตำบล
+- 🗺️ **แผนที่จำลอง** แสดงเส้นชายแดน
+- 📢 **แจ้งเหตุการณ์** พร้อมระบุตำแหน่ง
+- 📚 **คู่มือเตรียมพร้อม** และปฐมพยาบาล
+- 👮 **Admin Dashboard** จัดการระบบ
 
-- **ตรวจสอบระยะห่างจากชายแดน** (โดยประมาณ) ผ่าน GPS หรือเลือกตำบล
-- **รับข้อมูลสถานการณ์** และคำแนะนำตามระยะห่าง
-- **ส่งสัญญาณ SOS** ในกรณีฉุกเฉิน
-- **แจ้งเหตุการณ์** ผ่านระบบรายงาน
-- **ศึกษาคู่มือ** การเตรียมความพร้อมและปฐมพยาบาล
-
-> ⚠️ **หมายเหตุ**: ระยะที่คำนวณเป็นการประมาณการเท่านั้น กรุณาติดตามข่าวสารจากหน่วยงานราชการเป็นหลัก
+> ⚠️ ระยะที่คำนวณเป็นการประมาณการ กรุณาติดตามข่าวจากหน่วยงานราชการ
 
 ---
 
-## ✅ ความสามารถหลัก
+## ✨ ฟีเจอร์
 
-### 📍 เช็คระยะจากชายแดน
+### 📍 ระดับระยะจากชายแดน
 
-- **GPS Mode**: ใช้ตำแหน่งปัจจุบันจากอุปกรณ์
-- **เลือกตำบล**: Dropdown เลือกอำเภอ/ตำบล (37 ตำบล)
-- **Multi-point Calculation**: คำนวณจากหลายจุดบนแนวชายแดน (10 จุด)
-- **ระดับความใกล้** (ไม่ใช้คำว่า "ปลอดภัย/อันตราย"):
-  - 🔴 **ใกล้ชายแดนมาก** (< 10 กม.)
-  - 🟠 **ใกล้ชายแดน** (10-20 กม.)
-  - 🟡 **ระยะปานกลาง** (20-50 กม.)
-  - 🟢 **ค่อนข้างไกล** (50-90 กม.)
-  - ✅ **ไกลจากชายแดน** (> 90 กม.)
+| ระดับ            | ระยะ      |
+| ---------------- | --------- |
+| 🔴 ใกล้ชายแดนมาก | < 10 กม.  |
+| 🟠 ใกล้ชายแดน    | 10-20 กม. |
+| 🟡 ระยะปานกลาง   | 20-50 กม. |
+| 🟢 ค่อนข้างไกล   | 50-90 กม. |
+| ✅ ไกลจากชายแดน  | > 90 กม.  |
 
-### 🗺️ แผนที่จำลอง
+### 🔐 Security
 
-- แผนที่ Leaflet แสดงพื้นที่ จ.ตราด
-- เส้นชายแดนไทย-กัมพูชา
-- โหมดจำลองระยะยิงอาวุธ (MLRS, PHL-03)
+- JWT Authentication + Refresh Tokens
+- bcrypt Password Hashing
+- CSRF Protection
+- Rate Limiting
+- XSS/SQLi Detection
+- IP Blocking
 
-### 📢 ระบบรายงานเหตุการณ์
+### 💾 Storage
 
-- แจ้งเหตุ: เสียงระเบิด, เสียงปืน, การเคลื่อนพล, ถนนปิด ฯลฯ
-- ระบุตำแหน่งผ่าน GPS หรือเลือกตำบล
-- บันทึก IP ผู้รายงาน
-
-### 🚨 ปุ่ม SOS
-
-- ส่งสัญญาณฉุกเฉินพร้อมพิกัด GPS
-- ลิงก์ไปยัง Google Maps
-
-### 📚 คู่มือเตรียมความพร้อม
-
-- รายการเตรียมพร้อม 72 ชั่วโมง
-- คู่มือปฐมพยาบาลเบื้องต้น
-- เบอร์ฉุกเฉินสำคัญ
-
-### 👮 Admin Dashboard
-
-- ดู SOS และรายงานแบบ Real-time
-- จัดการข้อความประกาศ (Broadcasts)
-- ดู System Logs
-- กรองข้อมูลตามอำเภอ/สถานะ
-
-### 🔐 ระบบผู้ใช้
-
-- ลงทะเบียน/ล็อกอินสำหรับผู้ใช้ทั่วไป
-- ระบบ Admin แยก (username/password)
-- Session management
+- SQLite Database (ข้อมูลไม่หายเมื่อ restart)
 
 ---
 
-## 🚀 วิธีใช้งาน
+## 🚀 การติดตั้ง
 
 ### Prerequisites
 
 - Node.js 18+
-- npm
 
-### Installation
+### Quick Start
 
 ```bash
-# Clone repository
+# Clone
 git clone https://github.com/LethimCookMyBro/WebFor_ChaiDean.git
 cd KuyHunsen
 
-# Install dependencies
-npm install
+# Backend
+cd backend
+cp .env.example .env
+node server.js
 
-# Start development
+# Frontend (new terminal)
+cd frontend
+npm install
 npm run dev
 ```
 
 ### URLs
 
-| Service     | URL                   |
-| ----------- | --------------------- |
-| Frontend    | http://localhost:5174 |
-| Backend API | http://localhost:3001 |
+| Service  | URL                   |
+| -------- | --------------------- |
+| Frontend | http://localhost:5174 |
+| Backend  | http://localhost:3001 |
 
 ---
 
-## 📁 โครงสร้างโปรเจกต์
+## 📁 โครงสร้าง
 
 ```
 KuyHunsen/
-├── frontend/
-│   └── src/
-│       ├── pages/
-│       │   ├── HomeTab.jsx      # หน้าแรก + ข่าวสาร
-│       │   ├── CheckTab.jsx     # เช็คระยะจากชายแดน
-│       │   ├── MapTab.jsx       # แผนที่จำลอง
-│       │   ├── ReportTab.jsx    # แจ้งเหตุการณ์
-│       │   └── GuidesTab.jsx    # คู่มือเตรียมพร้อม
-│       ├── components/
-│       │   ├── SOSButton.jsx
-│       │   ├── ReportForm.jsx
-│       │   └── AdminDashboard.jsx
-│       └── data/
-│           ├── borderLine.js    # จุดชายแดน 10 จุด
-│           └── tratTambons.js   # ข้อมูล 37 ตำบล
-├── backend/
+├── frontend/src/
+│   ├── pages/
+│   │   ├── HomeTab.jsx         # หน้าแรก + ข่าวสาร
+│   │   ├── CheckTab.jsx        # เช็คระยะจากชายแดน
+│   │   ├── MapTab.jsx          # แผนที่จำลอง
+│   │   ├── GuideTab.jsx        # คู่มือเตรียมพร้อม
+│   │   ├── AdminDashboard.jsx  # Admin Dashboard
+│   │   └── AdminLoginPage.jsx  # Admin Login
+│   ├── components/
+│   │   ├── BottomNav.jsx       # เมนูล่าง
+│   │   ├── ReportForm.jsx      # ฟอร์มแจ้งเหตุ
+│   │   ├── LiveReports.jsx     # รายงานแบบ Real-time
+│   │   ├── FirstAidGuide.jsx   # คู่มือปฐมพยาบาล
+│   │   ├── SelfDefenseGuide.jsx
+│   │   └── EmergencyChecklist.jsx
 │   └── data/
-│       └── trat_province.js     # ข้อมูลจังหวัดตราด
+│       ├── borderLine.js       # จุดชายแดน
+│       └── tratTambons.js      # ข้อมูลตำบล
+├── backend/
+│   ├── server.js
+│   ├── db/
+│   │   ├── schema.sql
+│   │   └── database.sqlite
+│   ├── services/
+│   │   ├── database.js
+│   │   └── logger.js
+│   ├── routes/v1/
+│   │   ├── reports.js
+│   │   ├── status.js
+│   │   ├── admin.js
+│   │   ├── auth.js
+│   │   ├── geo.js
+│   │   └── locate.js
+│   └── middleware/
+│       ├── auth.js
+│       ├── security.js
+│       └── csrf.js
 └── docker-compose.yml
 ```
 
@@ -134,18 +130,45 @@ KuyHunsen/
 
 ## 📡 API Endpoints
 
-| Method | Endpoint                | Description        |
-| ------ | ----------------------- | ------------------ |
-| GET    | `/api/health`           | Health check       |
-| POST   | `/api/v1/auth/register` | ลงทะเบียนผู้ใช้    |
-| POST   | `/api/v1/auth/login`    | ล็อกอิน            |
-| GET    | `/api/v1/broadcasts`    | ดึงข้อความประกาศ   |
-| POST   | `/api/v1/reports`       | ส่งรายงานเหตุการณ์ |
-| POST   | `/api/v1/sos`           | ส่ง SOS            |
+| Method | Endpoint                      | Description       |
+| ------ | ----------------------------- | ----------------- |
+| GET    | `/api/health`                 | Health check      |
+| POST   | `/api/v1/auth/admin/login`    | Admin login       |
+| POST   | `/api/v1/auth/logout`         | Logout            |
+| GET    | `/api/v1/reports`             | ดึงรายงาน         |
+| POST   | `/api/v1/reports`             | ส่งรายงาน         |
+| GET    | `/api/v1/status/threat-level` | ระดับภัยคุกคาม    |
+| PUT    | `/api/v1/status/threat-level` | อัปเดตระดับภัย    |
+| GET    | `/api/v1/status/broadcasts`   | ดึงประกาศ         |
+| POST   | `/api/v1/status/broadcasts`   | สร้างประกาศ       |
+| GET    | `/api/v1/admin/logs`          | ดึง logs          |
+| GET    | `/api/v1/admin/blocked-ips`   | ดู IP ที่ถูกบล็อก |
+| POST   | `/api/v1/admin/blocked-ips`   | บล็อก IP          |
+| POST   | `/api/v1/locate/check`        | เช็คระยะ          |
+| GET    | `/api/v1/geo/districts`       | ดึงอำเภอ          |
 
 ---
 
-## 🐳 Docker Deployment
+## 🔧 Environment Variables
+
+ไฟล์ `backend/.env`:
+
+```env
+PORT=3001
+NODE_ENV=development
+JWT_SECRET=your-secret-key
+ADMIN_PASSWORD_HASH=<bcrypt hash>
+```
+
+สร้าง password hash:
+
+```bash
+node -e "require('bcryptjs').hash('your-password', 12).then(console.log)"
+```
+
+---
+
+## 🐳 Docker
 
 ```bash
 docker-compose up -d
@@ -153,13 +176,15 @@ docker-compose up -d
 
 ---
 
-## 📈 Roadmap
+## ⚠️ Deployment
 
-- [ ] Push Notifications (PWA)
-- [ ] Offline Mode
-- [ ] LINE Notify Integration
-- [ ] Export Reports (PDF)
-- [ ] Mobile App (React Native)
+### Vercel (ไม่รองรับ SQLite)
+
+ต้องเปลี่ยนเป็น Turso, Supabase หรือ PlanetScale
+
+### VPS / Docker
+
+รองรับ SQLite ได้เลย
 
 ---
 
@@ -177,8 +202,8 @@ docker-compose up -d
 
 ## 📜 License
 
-MIT License - ดูรายละเอียดใน [LICENSE](LICENSE)
+MIT License
 
 ---
 
-> ⚠️ **Disclaimer**: ข้อมูลในระบบนี้เป็นการประมาณการเท่านั้น ไม่ใช่ข้อมูลทางการจากหน่วยงานราชการ กรุณาติดตามประกาศอย่างเป็นทางการจากหน่วยงานป้องกันและบรรเทาสาธารณภัย
+> ⚠️ ข้อมูลในระบบนี้เป็นการประมาณการ กรุณาติดตามประกาศจากหน่วยงานป้องกันและบรรเทาสาธารณภัย
