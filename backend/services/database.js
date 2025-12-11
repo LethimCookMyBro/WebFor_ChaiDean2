@@ -378,6 +378,219 @@ const auditOps = {
 };
 
 // ============================================
+// Settings Operations
+// ============================================
+
+const settingsOps = {
+  get(key) {
+    try {
+      const stmt = db.prepare('SELECT value FROM system_settings WHERE key = ?');
+      const row = stmt.get(key);
+      return row ? row.value : null;
+    } catch (e) {
+      console.error('[DATABASE] settingsOps.get error:', e.message);
+      return null;
+    }
+  },
+  
+  set(key, value) {
+    try {
+      const stmt = db.prepare(`
+        INSERT INTO system_settings (key, value, updated_at) 
+        VALUES (?, ?, datetime('now'))
+        ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = datetime('now')
+      `);
+      stmt.run(key, value, value);
+      return true;
+    } catch (e) {
+      console.error('[DATABASE] settingsOps.set error:', e.message);
+      return false;
+    }
+  }
+};
+
+// ============================================
+// Broadcasts Operations
+// ============================================
+
+const broadcastsOps = {
+  getAll() {
+    try {
+      const stmt = db.prepare('SELECT * FROM broadcasts ORDER BY created_at DESC');
+      return stmt.all();
+    } catch (e) {
+      console.error('[DATABASE] broadcastsOps.getAll error:', e.message);
+      return [];
+    }
+  },
+  
+  create(message, priority = 'normal') {
+    try {
+      const id = 'bcast_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      const stmt = db.prepare(`
+        INSERT INTO broadcasts (id, message, from_user, created_at)
+        VALUES (?, ?, ?, datetime('now'))
+      `);
+      stmt.run(id, message, 'admin');
+      return { id, message, from_user: 'admin', created_at: new Date().toISOString() };
+    } catch (e) {
+      console.error('[DATABASE] broadcastsOps.create error:', e.message);
+      return null;
+    }
+  },
+  
+  delete(id) {
+    try {
+      const stmt = db.prepare('DELETE FROM broadcasts WHERE id = ?');
+      const result = stmt.run(id);
+      return result.changes > 0;
+    } catch (e) {
+      console.error('[DATABASE] broadcastsOps.delete error:', e.message);
+      return false;
+    }
+  }
+};
+
+// ============================================
+// Reports Operations
+// ============================================
+
+const reportsOps = {
+  getAll(limit = 100) {
+    try {
+      const stmt = db.prepare('SELECT * FROM reports ORDER BY created_at DESC LIMIT ?');
+      return stmt.all(limit);
+    } catch (e) {
+      console.error('[DATABASE] reportsOps.getAll error:', e.message);
+      return [];
+    }
+  },
+  
+  create(data) {
+    try {
+      const id = 'rpt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      const stmt = db.prepare(`
+        INSERT INTO reports (id, type, description, location, lat, lng, district, subdistrict, ip_address, verified, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `);
+      stmt.run(
+        id,
+        data.type,
+        data.description || '',
+        data.location || '',
+        data.lat || null,
+        data.lng || null,
+        data.district || '',
+        data.subDistrict || '',
+        data.ip || '',
+        data.verified ? 1 : 0
+      );
+      return { 
+        id, 
+        ...data, 
+        created_at: new Date().toISOString() 
+      };
+    } catch (e) {
+      console.error('[DATABASE] reportsOps.create error:', e.message);
+      return null;
+    }
+  },
+  
+  verify(id) {
+    try {
+      const stmt = db.prepare('UPDATE reports SET verified = 1 WHERE id = ?');
+      const result = stmt.run(id);
+      if (result.changes > 0) {
+        const getStmt = db.prepare('SELECT * FROM reports WHERE id = ?');
+        return getStmt.get(id);
+      }
+      return null;
+    } catch (e) {
+      console.error('[DATABASE] reportsOps.verify error:', e.message);
+      return null;
+    }
+  },
+  
+  update(id, updates) {
+    try {
+      const fields = [];
+      const values = [];
+      
+      if (updates.type !== undefined) { fields.push('type = ?'); values.push(updates.type); }
+      if (updates.description !== undefined) { fields.push('description = ?'); values.push(updates.description); }
+      if (updates.location !== undefined) { fields.push('location = ?'); values.push(updates.location); }
+      if (updates.verified !== undefined) { fields.push('verified = ?'); values.push(updates.verified ? 1 : 0); }
+      
+      if (fields.length === 0) return null;
+      
+      values.push(id);
+      const stmt = db.prepare(`UPDATE reports SET ${fields.join(', ')} WHERE id = ?`);
+      const result = stmt.run(...values);
+      
+      if (result.changes > 0) {
+        const getStmt = db.prepare('SELECT * FROM reports WHERE id = ?');
+        return getStmt.get(id);
+      }
+      return null;
+    } catch (e) {
+      console.error('[DATABASE] reportsOps.update error:', e.message);
+      return null;
+    }
+  },
+  
+  delete(id) {
+    try {
+      const stmt = db.prepare('DELETE FROM reports WHERE id = ?');
+      const result = stmt.run(id);
+      return result.changes > 0;
+    } catch (e) {
+      console.error('[DATABASE] reportsOps.delete error:', e.message);
+      return false;
+    }
+  }
+};
+
+// ============================================
+// App Logs Operations
+// ============================================
+
+const appLogsOps = {
+  add(level, category, message, details = null, ip = null) {
+    try {
+      const stmt = db.prepare(`
+        INSERT INTO app_logs (level, category, message, metadata, ip, created_at)
+        VALUES (?, ?, ?, ?, ?, datetime('now'))
+      `);
+      stmt.run(level, category, message, details ? JSON.stringify(details) : null, ip);
+      return true;
+    } catch (e) {
+      console.error('[DATABASE] appLogsOps.add error:', e.message);
+      return false;
+    }
+  },
+  
+  getAll(limit = 100) {
+    try {
+      const stmt = db.prepare('SELECT * FROM app_logs ORDER BY created_at DESC LIMIT ?');
+      return stmt.all(limit);
+    } catch (e) {
+      console.error('[DATABASE] appLogsOps.getAll error:', e.message);
+      return [];
+    }
+  },
+  
+  deleteOlderThan(days) {
+    try {
+      const stmt = db.prepare(`DELETE FROM app_logs WHERE created_at < datetime('now', '-' || ? || ' days')`);
+      return stmt.run(days).changes;
+    } catch (e) {
+      console.error('[DATABASE] appLogsOps.deleteOlderThan error:', e.message);
+      return 0;
+    }
+  }
+};
+
+// ============================================
 // Cleanup Job
 // ============================================
 
@@ -431,6 +644,10 @@ module.exports = {
   blockedIPsOps,
   loginAttemptsOps,
   auditOps,
+  settingsOps,
+  broadcastsOps,
+  reportsOps,
+  appLogsOps,
   startCleanupJob,
   stopCleanupJob
 };
