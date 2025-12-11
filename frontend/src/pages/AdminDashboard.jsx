@@ -838,30 +838,59 @@ export default function AdminDashboard() {
 
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-100">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            {/* Online Users - IP active in last 5 mins */}
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-green-100">
                 <div className="flex justify-between items-start">
                     <div>
-                        <p className="text-slate-500 text-sm">ผู้ใช้งานขณะนี้</p>
-                        <h3 className="text-2xl font-bold text-blue-600">
-                           🟢 {userStats.online} <span className="text-sm font-normal text-slate-400">คน</span>
+                        <p className="text-slate-500 text-sm">ออนไลน์ขณะนี้</p>
+                        <h3 className="text-2xl font-bold text-green-600">
+                           🟢 {userStats.online}
                         </h3>
                         <div className="text-xs text-slate-400 mt-1">
-                            เข้าชมทั้งหมด: <strong>{(userStats.pageViews || 0).toLocaleString()}</strong> ครั้ง
+                            IP active ใน 5 นาที
                         </div>
-                    </div>
-                    <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
-                        <Users className="w-5 h-5" />
                     </div>
                 </div>
             </div>
 
+            {/* Total Unique Users - Unique IPs ever */}
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-100">
+                <div className="flex justify-between items-start">
+                    <div>
+                        <p className="text-slate-500 text-sm">ผู้ใช้ทั้งหมด</p>
+                        <h3 className="text-2xl font-bold text-blue-600">
+                           👥 {userStats.total}
+                        </h3>
+                        <div className="text-xs text-slate-400 mt-1">
+                            Unique IPs
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Total Page Views */}
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-purple-100">
+                <div className="flex justify-between items-start">
+                    <div>
+                        <p className="text-slate-500 text-sm">เข้าชมทั้งหมด</p>
+                        <h3 className="text-2xl font-bold text-purple-600">
+                           📊 {(userStats.pageViews || 0).toLocaleString()}
+                        </h3>
+                        <div className="text-xs text-slate-400 mt-1">
+                            ครั้ง
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Reports Today */}
             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
                 <div className="flex justify-between items-start">
                     <div>
                         <p className="text-slate-500 text-sm">รายงานวันนี้</p>
-                        <h3 className="text-2xl font-bold font-mono">
-                            {reports.filter(r => {
+                        <h3 className="text-2xl font-bold text-slate-700">
+                            📋 {reports.filter(r => {
                                 const d = new Date(r.created_at || r.time)
                                 const today = new Date()
                                 return d.getDate() === today.getDate() && 
@@ -869,9 +898,9 @@ export default function AdminDashboard() {
                                        d.getFullYear() === today.getFullYear()
                             }).length}
                         </h3>
-                    </div>
-                    <div className="p-2 bg-slate-100 rounded-lg text-slate-600">
-                        <FileText className="w-5 h-5" />
+                        <div className="text-xs text-slate-400 mt-1">
+                            รายการ
+                        </div>
                     </div>
                 </div>
             </div>
