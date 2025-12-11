@@ -895,8 +895,15 @@ const feedbackOps = {
     try {
       const fields = [];
       const values = [];
-      if (updates.status) { fields.push('status = ?'); values.push(updates.status); }
-      if (updates.admin_notes !== undefined) { fields.push('admin_notes = ?'); values.push(updates.admin_notes); }
+      // Use !== undefined to allow empty strings if needed
+      if (updates.status !== undefined && updates.status !== null) { 
+        fields.push('status = ?'); 
+        values.push(updates.status); 
+      }
+      if (updates.admin_notes !== undefined) { 
+        fields.push('admin_notes = ?'); 
+        values.push(updates.admin_notes); 
+      }
       fields.push('updated_at = datetime("now")');
       
       if (fields.length === 1) return null; // Only updated_at, no real changes
