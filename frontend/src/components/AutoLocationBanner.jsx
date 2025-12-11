@@ -29,9 +29,43 @@ export default function AutoLocationBanner() {
     return () => clearTimeout(timer)
   }, [])
 
-  const checkLocation = () => {
+  // Fallback: IP-based geolocation for desktop
+  const checkLocationByIP = async () => {
+    try {
+      const res = await fetch('https://ipapi.co/json/')
+      if (!res.ok) throw new Error('IP lookup failed')
+      const data = await res.json()
+      
+      if (data.latitude && data.longitude) {
+        const borderResult = getDistanceToBorder(data.latitude, data.longitude)
+        const distance = borderResult.distance || borderResult.distanceRounded || borderResult
+        const level = getDistanceLevel(distance)
+        
+        setLocationResult({
+          lat: data.latitude,
+          lng: data.longitude,
+          accuracy: 5000, // IP geolocation is ~5km accuracy
+          distance,
+          level,
+          isIPBased: true,
+          city: data.city,
+          region: data.region
+        })
+        setStatus('success')
+        return true
+      }
+    } catch (e) {
+      console.warn('IP geolocation failed:', e)
+    }
+    return false
+  }
+
+  const checkLocation = async () => {
     if (!navigator.geolocation) {
-      setStatus('error')
+      // No GPS support, try IP-based
+      setStatus('loading')
+      const success = await checkLocationByIP()
+      if (!success) setStatus('error')
       return
     }
 
@@ -49,18 +83,22 @@ export default function AutoLocationBanner() {
           lng: longitude,
           accuracy: Math.round(accuracy),
           distance,
-          level
+          level,
+          isIPBased: false
         })
         setStatus('success')
       },
-      (err) => {
+      async (err) => {
         if (err.code === err.PERMISSION_DENIED) {
           setStatus('denied')
         } else {
-          setStatus('error')
+          // GPS failed (timeout or error), try IP-based fallback
+          console.log('GPS failed, trying IP-based location...')
+          const success = await checkLocationByIP()
+          if (!success) setStatus('error')
         }
       },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     )
   }
 
@@ -173,12 +211,18 @@ export default function AutoLocationBanner() {
               <span className="text-2xl">{level.emoji}</span>
             </div>
             <div>
-              <div className="text-xs opacity-70" style={{ color: level.color }}>📍 ตำแหน่งปัจจุบันของคุณ</div>
+              <div className="text-xs opacity-70" style={{ color: level.color }}>
+                📍 ตำแหน่งปัจจุบันของคุณ
+                {locationResult.isIPBased && <span className="ml-1">(จาก IP)</span>}
+              </div>
               <div className="font-bold text-xl" style={{ color: level.color }}>
                 {level.text}
               </div>
               <div className="text-sm mt-1" style={{ color: level.color }}>
                 ห่างจากชายแดน: <strong>{distance} กม.</strong>
+                {locationResult.isIPBased && locationResult.city && (
+                  <span className="opacity-70 ml-1"> ({locationResult.city})</span>
+                )}
               </div>
             </div>
           </div>
@@ -234,7 +278,7 @@ export default function AutoLocationBanner() {
                 <Shield className="w-5 h-5 flex-shrink-0 mt-0.5" />
                 <div>
                   <div className="font-bold">✅ คุณอยู่ในพื้นที่ปลอดภัย</div>
-                  <div className="text-sm">อยู่นอกระยะอาวุธยิงสนับสนุนทุุกชนิด</div>
+                  <div className="text-sm">อยู่นอกระยะอาวุธยิงสนับสนุนทุกชนิด</div>
                 </div>
               </div>
             )}
