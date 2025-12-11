@@ -1,127 +1,192 @@
 const express = require('express');
 const router = express.Router();
-const geoEngine = require('../../services/geoEngine');
-
-// In-memory reports (DB in production)
-const reports = [];
-
-// Init some data (optional)
-const initReports = () => {
-  if (reports.length === 0) {
-     // Keeping existing mock data or clearing is fine. Let's keep a few for admin to see.
-     reports.push({
-        id: 'rpt_001',
-        type: 'explosion',
-        location: 'ต.ภูผาหมอก อ.กันทรลักษ์',
-        lat: 14.3833,
-        lng: 104.8000,
-        time: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-        verified: true,
-        ip: '192.168.1.1'
-     });
-  }
-};
-initReports();
+const { reportsOps, appLogsOps } = require('../../services/database');
+const { requireAuth, requireAdmin } = require('../../middleware/auth');
 
 /**
  * GET /api/v1/reports
  * Get all reports
  */
 router.get('/', (req, res) => {
-  const { province, type, verified, hours } = req.query;
-  
-  let filtered = [...reports];
-  
-  if (type) filtered = filtered.filter(r => r.type === type);
-  if (verified !== undefined) filtered = filtered.filter(r => r.verified === (verified === 'true'));
-  // if (province) ... 
-
-  filtered.sort((a, b) => new Date(b.time) - new Date(a.time));
-  
-  res.json({
-    success: true,
-    count: filtered.length,
-    reports: filtered
-  });
+  try {
+    const { type, verified, limit } = req.query;
+    
+    let reports = reportsOps.getAll(parseInt(limit, 10) || 100);
+    
+    // Filter by type if specified
+    if (type) {
+      reports = reports.filter(r => r.type === type);
+    }
+    
+    // Filter by verified status if specified  
+    if (verified !== undefined) {
+      reports = reports.filter(r => r.verified === (verified === 'true' || verified === '1'));
+    }
+    
+    res.json({
+      success: true,
+      count: reports.length,
+      reports
+    });
+  } catch (error) {
+    console.error('[REPORTS] Error getting reports:', error.message);
+    res.status(500).json({ error: 'Failed to get reports' });
+  }
 });
 
 /**
  * POST /api/v1/reports
- * Create anonymous report with IP capture
+ * Create a new report
  */
 router.post('/', (req, res) => {
-  const { type, lat, lng, description, district, subdistrict, location } = req.body;
-  
-  if (!type) {
-    return res.status(400).json({ error: 'Bad Request', message: 'Type required' });
+  try {
+    const { type, description, location, lat, lng, district, subDistrict } = req.body;
+    const clientIP = req.clientIp || req.ip;
+    
+    if (!type) {
+      return res.status(400).json({ error: 'Report type is required' });
+    }
+    
+    const report = reportsOps.create({
+      type,
+      description: description || '',
+      location: location || '',
+      lat: lat || null,
+      lng: lng || null,
+      district: district || '',
+      subDistrict: subDistrict || '',
+      ip: clientIP,
+      verified: false
+    });
+    
+    // Log the report
+    appLogsOps.add('INFO', 'REPORT', `New report: ${type}`, {
+      reportId: report.id,
+      location: location || 'Unknown'
+    }, clientIP);
+    
+    res.status(201).json({
+      success: true,
+      report
+    });
+  } catch (error) {
+    console.error('[REPORTS] Error creating report:', error.message);
+    res.status(500).json({ error: 'Failed to create report' });
   }
-
-  // Location string construction
-  let locationStr = location || '';
-  if (!locationStr && lat && lng) {
-      locationStr = `GPS: ${lat}, ${lng}`;
-      // In real app, reverse geocode here
-  } else if (!locationStr && district) {
-      locationStr = `อ.${district} ${subdistrict ? 'ต.'+subdistrict : ''}`;
-  }
-
-  // Robust IP Capture
-  const clientIP = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
-                   req.socket?.remoteAddress || 
-                   req.ip || 
-                   req.body.ip || // Fallback to frontend-supplied IP if available
-                   'unknown'
-  
-  const newReport = {
-    id: `rpt_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-    type,
-    lat: lat || null,
-    lng: lng || null,
-    location: locationStr,
-    description: description || '',
-    time: new Date().toISOString(),
-    verified: false,
-    severity: 'unknown',
-    ip: clientIP, // Stored for admin
-    source: 'public'
-  };
-  
-  reports.unshift(newReport);
-  console.log(`[REPORT] New report from ${clientIP}: ${type}`);
-  
-  res.status(201).json({
-    success: true,
-    message: 'Report created',
-    report: newReport
-  });
 });
 
 /**
  * PUT /api/v1/reports/:id/verify
- * Verify report (Admin)
+ * Verify a report (Admin only)
  */
-router.put('/:id/verify', (req, res) => {
-   const { id } = req.params;
-   const { verified } = req.body;
-   
-   const report = reports.find(r => r.id === id);
-   if (!report) return res.status(404).json({ error: 'Not found' });
-   
-   report.verified = verified;
-   res.json({ success: true, report });
+router.put('/:id/verify', requireAuth, requireAdmin, (req, res) => {
+  try {
+    const { id } = req.params;
+    const clientIP = req.clientIp || req.ip;
+    
+    const report = reportsOps.verify(parseInt(id, 10));
+    
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+    
+    appLogsOps.add('INFO', 'ADMIN', `Report verified: ID ${id}`, {}, clientIP);
+    
+    res.json({
+      success: true,
+      report
+    });
+  } catch (error) {
+    console.error('[REPORTS] Error verifying report:', error.message);
+    res.status(500).json({ error: 'Failed to verify report' });
+  }
+});
+
+/**
+ * PUT /api/v1/reports/:id
+ * Edit a report (Admin only)
+ */
+router.put('/:id', requireAuth, requireAdmin, (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+    const clientIP = req.clientIp || req.ip;
+    
+    const report = reportsOps.update(parseInt(id, 10), updates);
+    
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+    
+    appLogsOps.add('INFO', 'ADMIN', `Report edited: ID ${id}`, { updates }, clientIP);
+    
+    res.json({
+      success: true,
+      report
+    });
+  } catch (error) {
+    console.error('[REPORTS] Error updating report:', error.message);
+    res.status(500).json({ error: 'Failed to update report' });
+  }
 });
 
 /**
  * DELETE /api/v1/reports/:id
- * Delete report (Admin)
+ * Delete a report (Admin only)
  */
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requireAuth, requireAdmin, (req, res) => {
+  try {
     const { id } = req.params;
-    const idx = reports.findIndex(r => r.id === id);
-    if (idx === -1) return res.status(404).json({ error: 'Not found' });
+    const clientIP = req.clientIp || req.ip;
     
-    reports.splice(idx, 1);
-    res.json({ success: true, message: 'Deleted' });
+    const deleted = reportsOps.delete(parseInt(id, 10));
+    
+    if (!deleted) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+    
+    appLogsOps.add('INFO', 'ADMIN', `Report deleted: ID ${id}`, {}, clientIP);
+    
+    res.json({
+      success: true,
+      message: 'Report deleted'
+    });
+  } catch (error) {
+    console.error('[REPORTS] Error deleting report:', error.message);
+    res.status(500).json({ error: 'Failed to delete report' });
+  }
+});
+
+/**
+ * DELETE /api/v1/reports/bulk
+ * Bulk delete reports (Admin only)
+ */
+router.delete('/bulk', requireAuth, requireAdmin, (req, res) => {
+  try {
+    const { ids } = req.body;
+    const clientIP = req.clientIp || req.ip;
+    
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Array of IDs is required' });
+    }
+    
+    let deletedCount = 0;
+    for (const id of ids) {
+      if (reportsOps.delete(parseInt(id, 10))) {
+        deletedCount++;
+      }
+    }
+    
+    appLogsOps.add('INFO', 'ADMIN', `Bulk deleted ${deletedCount} reports`, { ids }, clientIP);
+    
+    res.json({
+      success: true,
+      deletedCount
+    });
+  } catch (error) {
+    console.error('[REPORTS] Error bulk deleting reports:', error.message);
+    res.status(500).json({ error: 'Failed to delete reports' });
+  }
 });
 
 module.exports = router;
