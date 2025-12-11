@@ -57,7 +57,9 @@ export default function AdminDashboard() {
 
   // Security State
   const [blockedIPs, setBlockedIPs] = useState([])
+
   const [securityLogs, setSecurityLogs] = useState([])
+  const [userStats, setUserStats] = useState({ online: 0, total: 0 })
 
   // Broadcast
   const [showBroadcastForm, setShowBroadcastForm] = useState(false)
@@ -160,6 +162,19 @@ export default function AdminDashboard() {
     // 6. Fetch Security Logs (local for now)
     const savedSecLogs = JSON.parse(localStorage.getItem('securityLogs') || '[]')
     setSecurityLogs(savedSecLogs)
+
+    // 7. Fetch User Stats
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/stats/users`, { credentials: 'include' })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.success && data.data) {
+          setUserStats(data.data)
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch user stats')
+    }
 
     setLoading(false)
   }
@@ -785,6 +800,47 @@ export default function AdminDashboard() {
             )}
         </div>
 
+
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-100">
+                <div className="flex justify-between items-start">
+                    <div>
+                        <p className="text-slate-500 text-sm">ผู้ใช้งานขณะนี้ / รวม</p>
+                        <h3 className="text-2xl font-bold text-blue-600 space-x-2">
+                           <span>🟢 {userStats.online}</span>
+                           <span className="text-slate-300">/</span>
+                           <span className="text-slate-600">{userStats.total}</span>
+                        </h3>
+                    </div>
+                    <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
+                        <Users className="w-5 h-5" />
+                    </div>
+                </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <div className="flex justify-between items-start">
+                    <div>
+                        <p className="text-slate-500 text-sm">รายงานวันนี้</p>
+                        <h3 className="text-2xl font-bold font-mono">
+                            {reports.filter(r => {
+                                const d = new Date(r.created_at || r.time)
+                                const today = new Date()
+                                return d.getDate() === today.getDate() && 
+                                       d.getMonth() === today.getMonth() && 
+                                       d.getFullYear() === today.getFullYear()
+                            }).length}
+                        </h3>
+                    </div>
+                    <div className="p-2 bg-slate-100 rounded-lg text-slate-600">
+                        <FileText className="w-5 h-5" />
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         {/* Tab Navigation */}
         <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
             <button onClick={() => setActiveTab('reports')} className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap ${activeTab === 'reports' ? 'bg-blue-600 text-white' : 'bg-white border text-slate-600'}`}>

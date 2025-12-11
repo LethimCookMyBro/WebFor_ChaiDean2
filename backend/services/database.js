@@ -119,6 +119,13 @@ function createBasicTables() {
       locked_until DATETIME,
       last_attempt DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS visitors (
+      ip TEXT PRIMARY KEY,
+      user_agent TEXT,
+      last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 }
 
@@ -374,6 +381,59 @@ const auditOps = {
   cleanup(daysToKeep = 30) {
     const stmt = db.prepare(`DELETE FROM audit_logs WHERE created_at < datetime('now', '-' || ? || ' days')`);
     return stmt.run(daysToKeep).changes;
+  }
+};
+
+// ============================================
+// Visitor Tracking Operations
+// ============================================
+
+const visitorsOps = {
+  /**
+   * Record visit (insert or update last_seen)
+   */
+  recordVisit(ip, userAgent) {
+    const stmt = db.prepare(`
+      INSERT INTO visitors (ip, user_agent, last_seen)
+      VALUES (?, ?, datetime('now'))
+      ON CONFLICT(ip) DO UPDATE SET
+        last_seen = datetime('now'),
+        user_agent = excluded.user_agent
+    `);
+    const result = stmt.run(ip, userAgent);
+    return result.changes > 0;
+  },
+
+  /**
+   * Get visitor stats
+   * - online: active in last 5 minutes
+   * - total: total unique IPs tracked
+   */
+  getStats() {
+    // Count active in last 5 minutes
+    const onlineStmt = db.prepare(`
+      SELECT COUNT(*) as count FROM visitors 
+      WHERE last_seen > datetime('now', '-5 minutes')
+    `);
+    const online = onlineStmt.get().count;
+
+    // Count total unique visitors
+    const totalStmt = db.prepare('SELECT COUNT(*) as count FROM visitors');
+    const total = totalStmt.get().count;
+
+    return { online, total };
+  },
+
+  /**
+   * Cleanup old visitors (keep last 24 hours only to save space, or keeps history?)
+   * Let's keep history for "Total Users" count, but maybe clean very old data if needed.
+   * For now, just keeping all to satisfy "Total Users" requirement.
+   */
+  cleanup(daysToKeep = 30) {
+    // Optional: Only keep active tracking for recently active, but we want TOTAL unique users forever?
+    // User asked for "Total Users", so we shouldn't delete unless space is issue.
+    // We'll leave cleanup manual or for later.
+    return 0;
   }
 };
 
@@ -643,6 +703,7 @@ module.exports = {
   tokenBlacklistOps,
   blockedIPsOps,
   loginAttemptsOps,
+  visitorsOps,
   auditOps,
   settingsOps,
   broadcastsOps,

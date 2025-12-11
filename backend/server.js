@@ -23,6 +23,7 @@ const { initDatabase } = require('./services/database');
 const { rateLimiter, sanitizeRequest, authRateLimiter } = require('./middleware/security');
 const { csrfTokenMiddleware, csrfValidationMiddleware } = require('./middleware/csrf');
 const { auditMiddleware } = require('./middleware/audit');
+const visitorTracker = require('./middleware/visitorTracker');
 
 // Initialize Database
 try {
@@ -82,6 +83,9 @@ app.use((req, res, next) => {
   res.setHeader('X-Request-ID', req.requestId);
   next();
 });
+
+// Visitor Tracking (Real-time Online)
+app.use(visitorTracker);
 
 // IP Blocking Middleware (In-memory)
 app.use((req, res, next) => {

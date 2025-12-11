@@ -11,7 +11,7 @@
 const express = require('express');
 const router = express.Router();
 const logger = require('../../services/logger');
-const { appLogsOps, auditOps } = require('../../services/database');
+const { appLogsOps, auditOps, visitorsOps } = require('../../services/database');
 const { requireAuth, requireAdmin } = require('../../middleware/auth');
 
 // Apply auth middleware to all admin routes
@@ -138,6 +138,23 @@ router.get('/logs', (req, res) => {
   } catch (error) {
     logger.error('ADMIN', 'Failed to get logs', { error: error.message });
     res.status(500).json({ error: 'Failed to get logs' });
+  }
+});
+
+/**
+ * GET /api/v1/admin/stats/users
+ * Get realtime user stats
+ */
+router.get('/stats/users', (req, res) => {
+  try {
+    const stats = visitorsOps.getStats();
+    res.json({
+      success: true,
+      data: stats
+    });
+  } catch (error) {
+    logger.error('ADMIN', 'Failed to get user stats', { error: error.message });
+    res.status(500).json({ error: 'Failed to get user stats' });
   }
 });
 
