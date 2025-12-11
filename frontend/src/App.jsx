@@ -260,9 +260,12 @@ function MainApp() {
  * Admin Login Wrapper
  */
 function AdminLoginWrapper() {
+  const navigate = useNavigate();
   const handleLoginSuccess = () => {
-    // Force reload to trigger AdminProtected re-check
-    window.location.reload();
+    // Navigate directly to admin dashboard (session already in localStorage)
+    navigate('/admin', { replace: true });
+    // Also force component re-render by triggering state update
+    window.dispatchEvent(new Event('storage'));
   };
   return <AdminLoginPage onSuccess={handleLoginSuccess} />;
 }
@@ -275,22 +278,32 @@ function AdminProtected() {
   const [checking, setChecking] = useState(true)
 
   useEffect(() => {
-    const session = localStorage.getItem('adminSession')
-    if (session) {
-      try {
-        const data = JSON.parse(session)
-        // Check session expiry
-        if (data.expiresAt && new Date(data.expiresAt) < new Date()) {
+    const checkSession = () => {
+      const session = localStorage.getItem('adminSession')
+      if (session) {
+        try {
+          const data = JSON.parse(session)
+          // Check session expiry
+          if (data.expiresAt && new Date(data.expiresAt) < new Date()) {
+            localStorage.removeItem('adminSession')
+            setIsAdmin(false)
+          } else if (data.isAdmin) {
+            setIsAdmin(true)
+          }
+        } catch (e) {
           localStorage.removeItem('adminSession')
-          setIsAdmin(false)
-        } else if (data.isAdmin) {
-          setIsAdmin(true)
         }
-      } catch (e) {
-        localStorage.removeItem('adminSession')
+      } else {
+        setIsAdmin(false)
       }
+      setChecking(false)
     }
-    setChecking(false)
+    
+    checkSession()
+    
+    // Listen for storage changes (login/logout from other tabs or navigate dispatch)
+    window.addEventListener('storage', checkSession)
+    return () => window.removeEventListener('storage', checkSession)
   }, [])
 
   if (checking) {

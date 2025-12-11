@@ -1316,6 +1316,15 @@ export default function AdminDashboard() {
           </div>
         )}
       </main>
+      
+      {/* Floating Refresh Button for Mobile */}
+      <button 
+        onClick={() => window.location.reload()} 
+        className="fixed bottom-6 right-6 bg-blue-600 text-white p-4 rounded-full shadow-lg hover:bg-blue-700 active:scale-95 transition-all z-50 md:hidden"
+        title="รีเฟรช"
+      >
+        <RefreshCw className={`w-6 h-6 ${loading ? 'animate-spin' : ''}`} />
+      </button>
     </div>
   )
 }

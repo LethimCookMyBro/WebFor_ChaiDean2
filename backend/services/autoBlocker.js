@@ -11,7 +11,7 @@
  * Auto-blocks IPs exceeding thresholds
  */
 
-const { blockedIPsOps, appLogsOps } = require('./database');
+const { blockedIPsOps, appLogsOps, auditOps } = require('./database');
 
 // Configuration
 const CONFIG = {
@@ -144,19 +144,26 @@ function recordEvent(ip, eventType, details = {}) {
     try {
       blockedIPsOps.add(ip, `[AUTO-BLOCK] ${blockReason}`, 'system:auto-blocker');
       
-      // Log the auto-block
-      appLogsOps.add('SECURITY', 'AUTO_BLOCK', `🚨 IP อัตโนมัติถูกบล็อก: ${ip}`, {
-        ip,
-        reason: blockReason,
-        eventType,
-        tracking: {
-          rateLimitViolations: tracking.rateLimitViolations,
-          loginFailures: tracking.loginFailures,
-          sqlInjectionAttempts: tracking.sqlInjectionAttempts,
-          xssAttempts: tracking.xssAttempts
-        },
-        expiresAt: expiresAt.toISOString()
-      }, ip);
+      // Log the auto-block to Security Log (audit_logs)
+      auditOps.log({
+        event_type: 'AUTO_BLOCK',
+        user_id: 'system',
+        action: `Blocked IP ${ip}`,
+        resource: 'firewall',
+        ip: ip,
+        user_agent: 'system:auto-blocker',
+        metadata: JSON.stringify({
+          reason: blockReason,
+          eventType,
+          tracking: {
+            rateLimitViolations: tracking.rateLimitViolations,
+            loginFailures: tracking.loginFailures,
+            sqlInjectionAttempts: tracking.sqlInjectionAttempts,
+            xssAttempts: tracking.xssAttempts
+          },
+          expiresAt: expiresAt.toISOString()
+        })
+      });
       
       console.log(`[SECURITY] 🚨 AUTO-BLOCKED IP: ${ip} - Reason: ${blockReason}`);
       
@@ -184,8 +191,17 @@ function recordEvent(ip, eventType, details = {}) {
  * Log security event (always logs, may auto-block)
  */
 function logSecurityEvent(ip, eventType, message, details = {}) {
-  // Log to database
-  appLogsOps.add('SECURITY', eventType, message, { ...details, ip }, ip);
+  // Log to Security Log (audit_logs)
+  auditOps.log({
+    event_type: eventType,
+    user_id: 'system',
+    action: message,
+    resource: details.path || 'unknown',
+    ip: ip,
+    user_agent: details.userAgent || 'unknown',
+    request_id: details.requestId,
+    metadata: JSON.stringify(details)
+  });
   
   // Check for auto-block
   const result = recordEvent(ip, eventType, details);
