@@ -1288,7 +1288,11 @@ export default function AdminDashboard() {
                                         <span>{new Date(log.created_at || log.time || log.timestamp).toLocaleString()}</span>
                                         <span className="font-mono">{log.ip}</span>
                                     </div>
-                                    <div className="font-medium">{log.details}</div>
+                                    <div className="font-medium">
+                                        {typeof log.details === 'object' 
+                                            ? JSON.stringify(log.details, null, 2) 
+                                            : log.details}
+                                    </div>
                                 </div>
                             ))}
                         </div>
