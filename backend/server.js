@@ -138,14 +138,15 @@ app.use('/api/v1/geo', rateLimiter, geoRoutes);
 app.use('/api/v1/reports', rateLimiter, reportsRoutes);
 app.use('/api/v1/admin', rateLimiter, adminRoutes);
 
-// Root
-app.get('/', (req, res) => {
-  res.json({
-    status: 'operational',
-    service: 'Border Safety API',
-    version: '2.3',
-    storage: 'in-memory'
-  });
+// ============================================
+// SPA Catch-all - Serve index.html for React Router
+// ============================================
+app.get('*', (req, res) => {
+  // Don't catch API routes
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({ error: 'Not Found' });
+  }
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Error Handler
