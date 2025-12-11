@@ -1,4 +1,4 @@
-# Force rebuild v4 - Fix npm install
+# Force rebuild v5 - Add better-sqlite3 dependency
 # Multi-stage Dockerfile for Border Safety - Railway Optimized
 
 # ============================================
