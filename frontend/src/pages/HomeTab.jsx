@@ -16,6 +16,8 @@ export default function HomeTab({
 }) {
   const [adminReports, setAdminReports] = useState([])
   const [threatLevel, setThreatLevel] = useState(propThreatLevel)
+  const [threatMessage, setThreatMessage] = useState('')
+  const [threatUpdatedAt, setThreatUpdatedAt] = useState(new Date())
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   // Load data from API
@@ -49,6 +51,8 @@ export default function HomeTab({
       if (threatRes.ok) {
         const data = await threatRes.json()
         if (data.level) setThreatLevel(data.level)
+        if (data.message !== undefined) setThreatMessage(data.message)
+        if (data.updatedAt) setThreatUpdatedAt(new Date(data.updatedAt))
       }
     } catch (e) {
       // Use prop or localStorage fallback
@@ -84,7 +88,11 @@ export default function HomeTab({
       </div>
 
       {/* Threat Banner */}
-      <ThreatBanner level={threatLevel} />
+      <ThreatBanner 
+        level={threatLevel} 
+        customMessage={threatMessage}
+        lastUpdated={threatUpdatedAt}
+      />
 
       {/* Quick Actions */}
       <QuickActions 

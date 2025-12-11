@@ -54,7 +54,7 @@ router.get('/', (req, res) => {
 
 /**
  * GET /api/v1/status/threat-level
- * Get current threat level (cached for 30s)
+ * Get current threat level with custom message (cached for 30s)
  */
 router.get('/threat-level', (req, res) => {
   try {
@@ -65,11 +65,16 @@ router.get('/threat-level', (req, res) => {
       cache.set(CACHE_KEYS.THREAT_LEVEL, level, 30); // Cache for 30 seconds
     }
     
+    // Get custom message (not cached to ensure fresh)
+    const message = settingsOps.get('threat_message') || '';
+    const updatedAt = settingsOps.get('threat_updated_at') || new Date().toISOString();
+    
     res.json({
       success: true,
       level,
-      cached: !!cache.get(CACHE_KEYS.THREAT_LEVEL),
-      updatedAt: new Date().toISOString()
+      message,
+      updatedAt,
+      cached: !!cache.get(CACHE_KEYS.THREAT_LEVEL)
     });
   } catch (error) {
     console.error('[STATUS] Get threat level error:', error.message);
@@ -79,11 +84,11 @@ router.get('/threat-level', (req, res) => {
 
 /**
  * PUT /api/v1/status/threat-level
- * Update threat level (Admin only in production)
+ * Update threat level with custom message (Admin only in production)
  */
 router.put('/threat-level', (req, res) => {
   try {
-    const { level } = req.body;
+    const { level, message } = req.body;
     const validLevels = ['GREEN', 'YELLOW', 'ORANGE', 'RED'];
     
     if (!level || !validLevels.includes(level)) {
@@ -94,7 +99,11 @@ router.put('/threat-level', (req, res) => {
     }
     
     const oldLevel = settingsOps.get('threat_level') || 'YELLOW';
+    const oldMessage = settingsOps.get('threat_message') || '';
+    
     settingsOps.set('threat_level', level);
+    settingsOps.set('threat_message', message || '');
+    settingsOps.set('threat_updated_at', new Date().toISOString());
     
     // Invalidate cache on write
     cache.invalidate(CACHE_KEYS.THREAT_LEVEL);
@@ -102,15 +111,17 @@ router.put('/threat-level', (req, res) => {
     // Log to database
     appLogsOps.add('SECURITY', 'SYSTEM', `ระดับภัยคุกคามเปลี่ยน: ${oldLevel} → ${level}`, {
       oldLevel,
-      newLevel: level
+      newLevel: level,
+      message: message || '(ไม่มีข้อความ)'
     }, req.clientIp || req.ip);
     
-    console.log(`[STATUS] Threat level changed to ${level}`);
+    console.log(`[STATUS] Threat level changed to ${level}${message ? ` with message: ${message}` : ''}`);
     
     res.json({
       success: true,
       level,
-      message: `Threat level updated to ${level}`
+      message: message || '',
+      updatedAt: new Date().toISOString()
     });
   } catch (error) {
     console.error('[STATUS] Update threat level error:', error.message);
