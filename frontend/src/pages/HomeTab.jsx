@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, Bug, Lightbulb } from 'lucide-react'
 import ThreatBanner from '../components/ThreatBanner'
 import QuickActions from '../components/QuickActions'
 import LiveReports from '../components/LiveReports'
 import ReportForm from '../components/ReportForm'
 import AutoLocationBanner from '../components/AutoLocationBanner'
+import FeedbackPage from './FeedbackPage'
 import API_BASE from '../config/api'
 
 /**
@@ -20,6 +21,7 @@ export default function HomeTab({
   const [threatMessage, setThreatMessage] = useState('')
   const [threatUpdatedAt, setThreatUpdatedAt] = useState(new Date())
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [showFeedback, setShowFeedback] = useState(false)
 
   // Load data from API
   const loadData = useCallback(async () => {
@@ -74,6 +76,11 @@ export default function HomeTab({
     loadData()
   }
 
+  // Show FeedbackPage fullscreen
+  if (showFeedback) {
+    return <FeedbackPage onBack={() => setShowFeedback(false)} />
+  }
+
   return (
     <div className="space-y-4">
       {/* Refresh Button - Mobile Friendly */}
@@ -125,7 +132,23 @@ export default function HomeTab({
 
       {/* Report Form (Anonymous) */}
       <ReportForm />
+
+      {/* Feedback Button */}
+      <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl p-4 border border-blue-200">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-slate-700">💬 ช่วยพัฒนาระบบ</h3>
+            <p className="text-sm text-slate-500">แจ้งปัญหาหรือเสนอไอเดียใหม่</p>
+          </div>
+          <button
+            onClick={() => setShowFeedback(true)}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl flex items-center gap-2 text-sm font-medium transition-colors"
+          >
+            <Bug className="w-4 h-4" />
+            <span>แจ้งปัญหา</span>
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
-
