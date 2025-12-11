@@ -112,7 +112,7 @@ export default function HomeTab({
               <div key={i} className="p-3 bg-white rounded-xl">
                 <p className="font-medium">{report.message}</p>
                 <p className="text-xs text-slate-500 mt-1">
-                  {new Date(report.time).toLocaleString('th-TH')}
+                  {new Date(report.created_at || report.time).toLocaleString('th-TH')}
                 </p>
               </div>
             ))}

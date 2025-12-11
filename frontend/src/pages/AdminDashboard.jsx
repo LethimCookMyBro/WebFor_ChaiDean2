@@ -559,7 +559,7 @@ export default function AdminDashboard() {
   const checkSpamIP = () => {
      // Simple client-side check
      const oneHourAgo = Date.now() - 3600000
-     const recent = reports.filter(r => new Date(r.time).getTime() > oneHourAgo)
+     const recent = reports.filter(r => new Date(r.created_at || r.time).getTime() > oneHourAgo)
      const counts = {}
      recent.forEach(r => {
          const ip = r.ip || r.ip_address
@@ -1203,7 +1203,7 @@ export default function AdminDashboard() {
                             {securityLogs.length === 0 ? <p className="text-center text-slate-400 py-4">ไม่มีประวัติความปลอดภัย</p> : securityLogs.map(log => (
                                 <div key={log.id} className={`p-2 rounded text-sm border-l-4 ${log.action === 'blocked' ? 'border-red-500 bg-red-50' : 'border-green-500 bg-green-50'}`}>
                                     <div className="flex justify-between text-xs text-slate-500 mb-1">
-                                        <span>{new Date(log.time).toLocaleString()}</span>
+                                        <span>{new Date(log.created_at || log.time || log.timestamp).toLocaleString()}</span>
                                         <span className="font-mono">{log.ip}</span>
                                     </div>
                                     <div className="font-medium">{log.details}</div>
@@ -1278,7 +1278,7 @@ export default function AdminDashboard() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="font-medium">เวลาส่ง:</span>
-                  <span>{new Date(editingReport.time).toLocaleString('th-TH')}</span>
+                  <span>{new Date(editingReport.created_at || editingReport.time).toLocaleString('th-TH')}</span>
                 </div>
                 {editingReport.lat && editingReport.lng && (
                   <div className="flex items-center gap-2">
