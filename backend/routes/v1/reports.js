@@ -1,47 +1,48 @@
 const express = require('express');
 const router = express.Router();
-const { reportsOps, appLogsOps } = require('../../services/database');
+const geoEngine = require('../../services/geoEngine');
+
+// In-memory reports (DB in production)
+const reports = [];
+
+// Init some data (optional)
+const initReports = () => {
+  if (reports.length === 0) {
+     // Keeping existing mock data or clearing is fine. Let's keep a few for admin to see.
+     reports.push({
+        id: 'rpt_001',
+        type: 'explosion',
+        location: 'ต.ภูผาหมอก อ.กันทรลักษ์',
+        lat: 14.3833,
+        lng: 104.8000,
+        time: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+        verified: true,
+        ip: '192.168.1.1'
+     });
+  }
+};
+initReports();
 
 /**
  * GET /api/v1/reports
  * Get all reports
  */
 router.get('/', (req, res) => {
-  try {
-    const { type, verified, limit } = req.query;
-    
-    const options = {};
-    if (type) options.type = type;
-    if (verified !== undefined) options.verified = verified === 'true';
-    if (limit) options.limit = parseInt(limit, 10);
-    
-    const reports = reportsOps.getAll(options);
-    
-    // Map database format to API format
-    const formattedReports = reports.map(r => ({
-      id: r.id,
-      type: r.type,
-      lat: r.lat,
-      lng: r.lng,
-      location: r.location,
-      description: r.description,
-      time: r.created_at,
-      verified: !!r.verified,
-      severity: 'unknown',
-      ip: r.ip_address,
-      source: 'public',
-      editedAt: r.updated_at
-    }));
-    
-    res.json({
-      success: true,
-      count: formattedReports.length,
-      reports: formattedReports
-    });
-  } catch (error) {
-    console.error('[REPORTS] Get error:', error.message);
-    res.status(500).json({ error: 'Failed to get reports' });
-  }
+  const { province, type, verified, hours } = req.query;
+  
+  let filtered = [...reports];
+  
+  if (type) filtered = filtered.filter(r => r.type === type);
+  if (verified !== undefined) filtered = filtered.filter(r => r.verified === (verified === 'true'));
+  // if (province) ... 
+
+  filtered.sort((a, b) => new Date(b.time) - new Date(a.time));
+  
+  res.json({
+    success: true,
+    count: filtered.length,
+    reports: filtered
+  });
 });
 
 /**
@@ -49,65 +50,50 @@ router.get('/', (req, res) => {
  * Create anonymous report with IP capture
  */
 router.post('/', (req, res) => {
-  try {
-    const { type, lat, lng, description, district, subdistrict, location } = req.body;
-    
-    if (!type) {
-      return res.status(400).json({ error: 'Bad Request', message: 'Type required' });
-    }
-
-    // Location string construction
-    let locationStr = location || '';
-    if (!locationStr && lat && lng) {
-      locationStr = `GPS: ${lat}, ${lng}`;
-    } else if (!locationStr && district) {
-      locationStr = `อ.${district} ${subdistrict ? 'ต.'+subdistrict : ''}`;
-    }
-
-    // Robust IP Capture
-    const clientIP = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
-                     req.socket?.remoteAddress || 
-                     req.ip || 
-                     req.body.ip || 
-                     'unknown';
-    
-    // Clean IP (remove ::ffff: prefix)
-    const cleanIP = clientIP.replace(/^::ffff:/, '');
-    
-    const newReport = {
-      id: `rpt_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-      type,
-      lat: lat || null,
-      lng: lng || null,
-      location: locationStr,
-      description: description || '',
-      time: new Date().toISOString(),
-      verified: false,
-      ip: cleanIP,
-      subdistrict: subdistrict || null
-    };
-    
-    reportsOps.create(newReport);
-    
-    // Log to database
-    appLogsOps.add('INFO', 'REPORT', `รายงานใหม่: ${type}`, {
-      reportId: newReport.id,
-      type: type,
-      location: locationStr,
-      hasGPS: !!(lat && lng)
-    }, cleanIP);
-    
-    console.log(`[REPORT] New report from ${cleanIP}: ${type}`);
-    
-    res.status(201).json({
-      success: true,
-      message: 'Report created',
-      report: newReport
-    });
-  } catch (error) {
-    console.error('[REPORTS] Create error:', error.message);
-    res.status(500).json({ error: 'Failed to create report' });
+  const { type, lat, lng, description, district, subdistrict, location } = req.body;
+  
+  if (!type) {
+    return res.status(400).json({ error: 'Bad Request', message: 'Type required' });
   }
+
+  // Location string construction
+  let locationStr = location || '';
+  if (!locationStr && lat && lng) {
+      locationStr = `GPS: ${lat}, ${lng}`;
+      // In real app, reverse geocode here
+  } else if (!locationStr && district) {
+      locationStr = `อ.${district} ${subdistrict ? 'ต.'+subdistrict : ''}`;
+  }
+
+  // Robust IP Capture
+  const clientIP = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
+                   req.socket?.remoteAddress || 
+                   req.ip || 
+                   req.body.ip || // Fallback to frontend-supplied IP if available
+                   'unknown'
+  
+  const newReport = {
+    id: `rpt_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+    type,
+    lat: lat || null,
+    lng: lng || null,
+    location: locationStr,
+    description: description || '',
+    time: new Date().toISOString(),
+    verified: false,
+    severity: 'unknown',
+    ip: clientIP, // Stored for admin
+    source: 'public'
+  };
+  
+  reports.unshift(newReport);
+  console.log(`[REPORT] New report from ${clientIP}: ${type}`);
+  
+  res.status(201).json({
+    success: true,
+    message: 'Report created',
+    report: newReport
+  });
 });
 
 /**
@@ -115,67 +101,14 @@ router.post('/', (req, res) => {
  * Verify report (Admin)
  */
 router.put('/:id/verify', (req, res) => {
-  try {
-    const { id } = req.params;
-    const { verified } = req.body;
-    
-    const report = reportsOps.getById(id);
-    if (!report) return res.status(404).json({ error: 'Not found' });
-    
-    reportsOps.update(id, { verified });
-    
-    // Log to database
-    appLogsOps.add('INFO', 'REPORT', `รายงาน ${verified ? 'ยืนยันแล้ว' : 'ยกเลิกยืนยัน'}: ${report.type}`, {
-      reportId: id,
-      verified: verified
-    }, req.clientIp || req.ip);
-    
-    console.log(`[REPORT] Verified report ${id}: ${verified}`);
-    
-    res.json({ 
-      success: true, 
-      report: { ...report, verified }
-    });
-  } catch (error) {
-    console.error('[REPORTS] Verify error:', error.message);
-    res.status(500).json({ error: 'Failed to verify report' });
-  }
-});
-
-/**
- * PUT /api/v1/reports/:id
- * Edit report (Admin)
- */
-router.put('/:id', (req, res) => {
-  try {
-    const { id } = req.params;
-    const { type, description, location } = req.body;
-    
-    const report = reportsOps.getById(id);
-    if (!report) return res.status(404).json({ error: 'Not found' });
-    
-    const updates = {};
-    if (type) updates.type = type;
-    if (description !== undefined) updates.description = description;
-    if (location) updates.location = location;
-    
-    reportsOps.update(id, updates);
-    
-    // Log to database
-    appLogsOps.add('INFO', 'REPORT', `แก้ไขรายงาน: ${report.type}`, {
-      reportId: id,
-      changes: Object.keys(updates)
-    }, req.clientIp || req.ip);
-    
-    console.log(`[REPORT] Edited report ${id}`);
-    res.json({ 
-      success: true, 
-      report: { ...report, ...updates, editedAt: new Date().toISOString() }
-    });
-  } catch (error) {
-    console.error('[REPORTS] Edit error:', error.message);
-    res.status(500).json({ error: 'Failed to edit report' });
-  }
+   const { id } = req.params;
+   const { verified } = req.body;
+   
+   const report = reports.find(r => r.id === id);
+   if (!report) return res.status(404).json({ error: 'Not found' });
+   
+   report.verified = verified;
+   res.json({ success: true, report });
 });
 
 /**
@@ -183,24 +116,12 @@ router.put('/:id', (req, res) => {
  * Delete report (Admin)
  */
 router.delete('/:id', (req, res) => {
-  try {
     const { id } = req.params;
+    const idx = reports.findIndex(r => r.id === id);
+    if (idx === -1) return res.status(404).json({ error: 'Not found' });
     
-    const report = reportsOps.getById(id);
-    const deleted = reportsOps.delete(id);
-    if (!deleted) return res.status(404).json({ error: 'Not found' });
-    
-    // Log to database
-    appLogsOps.add('WARN', 'REPORT', `ลบรายงาน: ${report?.type || id}`, {
-      reportId: id
-    }, req.clientIp || req.ip);
-    
-    console.log(`[REPORT] Deleted report ${id}`);
+    reports.splice(idx, 1);
     res.json({ success: true, message: 'Deleted' });
-  } catch (error) {
-    console.error('[REPORTS] Delete error:', error.message);
-    res.status(500).json({ error: 'Failed to delete report' });
-  }
 });
 
 module.exports = router;

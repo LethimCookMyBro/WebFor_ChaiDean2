@@ -19,19 +19,38 @@ const BORDER_LINE = [
   [11.60, 102.93], [11.55, 102.92], [11.50, 102.92],
 ]
 
-// โซนความปลอดภัย - ตามระยะอาวุธจริง
-const SAFETY_ZONES = [
+// โซนความปลอดภัย - ทั้งหมด
+const ALL_ZONES = [
   { range: 10, label: '🚨 วิกฤต', desc: '0-10 กม.', color: '#991b1b', fillOpacity: 0.35 },
   { range: 20, label: '🔴 อันตรายสูง', desc: '10-20 กม.', color: '#dc2626', fillOpacity: 0.28 },
-  { range: 52, label: '🟠 BM-21', desc: '20-52 กม.', color: '#ea580c', fillOpacity: 0.20 },
-  { range: 130, label: '🟡 PHL-03', desc: '52-130 กม.', color: '#eab308', fillOpacity: 0.12 },
+  { range: 52, label: '🟠 ระยะ BM-21', desc: '20-52 กม.', color: '#ea580c', fillOpacity: 0.20 },
+  { range: 130, label: '🟡 ระยะ PHL-03', desc: '52-130 กม.', color: '#eab308', fillOpacity: 0.12 },
   { range: 160, label: '🟢 ระยะขยาย', desc: '130-160 กม.', color: '#22c55e', fillOpacity: 0.08 },
 ]
 
-// อาวุธ - ระยะยิงจริง
+// อาวุธ - ระยะยิงจริง + โซนที่แสดง
 const WEAPONS = {
-  mlrs: { name: 'BM-21 Grad / Type90B', icon: '🚀', ranges: [52], colors: ['#ea580c'] },
-  phl03: { name: 'PHL-03', icon: '🎯', ranges: [130], colors: ['#eab308'] },
+  mlrs: { 
+    name: 'BM-21 Grad / Type90B', 
+    icon: '🚀', 
+    maxRange: 52,
+    zones: [
+      { range: 10, color: '#991b1b', fillOpacity: 0.40 },
+      { range: 20, color: '#dc2626', fillOpacity: 0.30 },
+      { range: 52, color: '#ea580c', fillOpacity: 0.18 },
+    ]
+  },
+  phl03: { 
+    name: 'PHL-03', 
+    icon: '🎯', 
+    maxRange: 130,
+    zones: [
+      { range: 10, color: '#991b1b', fillOpacity: 0.40 },
+      { range: 20, color: '#dc2626', fillOpacity: 0.32 },
+      { range: 52, color: '#ea580c', fillOpacity: 0.22 },
+      { range: 130, color: '#eab308', fillOpacity: 0.12 },
+    ]
+  },
 }
 
 const TRAT_CENTER = [11.80, 102.80]
@@ -103,8 +122,8 @@ export default function MapTab() {
           {/* Border */}
           <Polyline positions={BORDER_LINE} pathOptions={{ color: '#dc2626', weight: 3, dashArray: '8, 6', opacity: 0.9 }} />
           
-          {/* Safety Zones - เส้นบางๆ */}
-          {simPoint && [...SAFETY_ZONES].reverse().map((zone, i) => (
+          {/* Weapon-specific Zones */}
+          {simPoint && [...currentWeapon.zones].reverse().map((zone, i) => (
             <Circle key={`zone-${i}`} center={simPoint} radius={zone.range * 1000}
               pathOptions={{ 
                 color: zone.color, 
@@ -115,17 +134,17 @@ export default function MapTab() {
               }} />
           ))}
           
-          {/* Weapon Range - เส้นประบาง */}
-          {simPoint && currentWeapon.ranges.map((range, i) => (
-            <Circle key={`weapon-${i}`} center={simPoint} radius={range * 1000}
+          {/* Max Range Circle - เส้นประหนา */}
+          {simPoint && (
+            <Circle center={simPoint} radius={currentWeapon.maxRange * 1000}
               pathOptions={{ 
-                color: currentWeapon.colors[i], 
+                color: currentWeapon.zones[currentWeapon.zones.length - 1].color, 
                 fillOpacity: 0, 
-                weight: 2, 
-                dashArray: '6, 4',
-                opacity: 0.8
+                weight: 3, 
+                dashArray: '10, 6',
+                opacity: 1
               }} />
-          ))}
+          )}
           
           {simPoint && (
             <Marker position={simPoint} 
@@ -145,30 +164,35 @@ export default function MapTab() {
         {simPoint && (
           <div className="absolute top-3 left-3 z-[1000] bg-white/95 backdrop-blur rounded-lg p-2 text-[10px] shadow-lg">
             <div className="font-bold mb-1">💥 {currentWeapon.icon} {currentWeapon.name}</div>
-            <button onClick={() => setSimPoint(null)} className="text-red-500 hover:text-red-700 font-medium">✕ ล้าง</button>
+            <div className="text-slate-500">ระยะสูงสุด: {currentWeapon.maxRange} กม.</div>
+            <button onClick={() => setSimPoint(null)} className="text-red-500 hover:text-red-700 font-medium mt-1">✕ ล้าง</button>
           </div>
         )}
       </div>
 
-      {/* Legend - ด้านล่างแผนที่ ขนาดใหญ่ */}
+      {/* Legend - ตามอาวุธที่เลือก */}
       <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
         <h3 className="font-bold text-sm mb-3 flex items-center gap-2">
-          <Target className="w-4 h-4" /> โซนความปลอดภัย
+          <Target className="w-4 h-4" /> {currentWeapon.icon} {currentWeapon.name} (ระยะ {currentWeapon.maxRange} กม.)
         </h3>
-        <div className="grid grid-cols-5 gap-2">
-          {SAFETY_ZONES.map((z, i) => (
-            <div key={i} className="text-center p-2 rounded-lg" style={{ backgroundColor: `${z.color}20` }}>
-              <div className="w-6 h-6 mx-auto rounded-full mb-1" style={{ backgroundColor: z.color }}></div>
-              <div className="text-xs font-bold" style={{ color: z.color }}>{z.label.split(' ')[0]}</div>
-              <div className="text-[10px] text-slate-600">{z.desc}</div>
-            </div>
-          ))}
+        <div className={`grid gap-2 ${currentWeapon.zones.length === 3 ? 'grid-cols-3' : 'grid-cols-4'}`}>
+          {currentWeapon.zones.map((z, i) => {
+            const prevRange = i === 0 ? 0 : currentWeapon.zones[i - 1].range
+            return (
+              <div key={i} className="text-center p-2 rounded-lg" style={{ backgroundColor: `${z.color}20` }}>
+                <div className="w-6 h-6 mx-auto rounded-full mb-1" style={{ backgroundColor: z.color }}></div>
+                <div className="text-[10px] text-slate-600">{prevRange}-{z.range} กม.</div>
+              </div>
+            )
+          })}
         </div>
       </div>
 
       {/* Disclaimer */}
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-2 text-center">
-        <p className="text-xs text-amber-800">⚠️ <strong>การจำลองตามระยะอาวุธจริง</strong> — BM-21: 52 กม. / PHL-03: 130 กม.</p>
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+        <p className="text-xs text-amber-800 text-center">
+          ⚠️ <strong>นี่เป็นการจำลองเท่านั้น</strong> — อย่าเชื่อถือข้อมูลนี้ 100% กรุณาติดตามข่าวจากหน่วยงานราชการ
+        </p>
       </div>
     </div>
   )

@@ -6,7 +6,6 @@ const helmet = require('helmet');
 const requestIp = require('request-ip');
 const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
-const path = require('path');
 
 // Routes
 const locateRoutes = require('./routes/v1/locate');
@@ -17,21 +16,10 @@ const authRoutes = require('./routes/v1/auth');
 const adminRoutes = require('./routes/v1/admin');
 const healthRoutes = require('./routes/health');
 
-// Services
 const logger = require('./services/logger');
-const { initDatabase } = require('./services/database');
 const { rateLimiter, sanitizeRequest, authRateLimiter } = require('./middleware/security');
 const { csrfTokenMiddleware, csrfValidationMiddleware } = require('./middleware/csrf');
 const { auditMiddleware } = require('./middleware/audit');
-
-// Initialize Database
-try {
-  initDatabase();
-  console.log('📦 Database initialized successfully');
-} catch (error) {
-  console.error('❌ Database initialization failed:', error.message);
-  process.exit(1);
-}
 
 const app = express();
 
@@ -39,16 +27,6 @@ const app = express();
 app.set('trust proxy', true);
 const PORT = process.env.PORT || 3001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
-
-// ============================================
-// Static Files (MUST be before CORS & other middleware)
-// Static files don't need CORS and should be served immediately
-// ============================================
-app.use(express.static(path.join(__dirname, 'public'), {
-  maxAge: NODE_ENV === 'production' ? '1d' : 0,
-  etag: true,
-  index: false  // Don't serve index.html for root yet
-}));
 
 // ============================================
 // Security Middleware
@@ -125,10 +103,6 @@ app.use('/api/v1', csrfValidationMiddleware);
 // ============================================
 // API Routes
 // ============================================
-
-// Top-level health check for Railway
-app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
-
 app.use('/api/health', healthRoutes);
 app.use('/api/v1/auth', authRateLimiter, authRoutes);
 app.use('/api/v1/locate', rateLimiter, locateRoutes);
@@ -137,20 +111,17 @@ app.use('/api/v1/geo', rateLimiter, geoRoutes);
 app.use('/api/v1/reports', rateLimiter, reportsRoutes);
 app.use('/api/v1/admin', rateLimiter, adminRoutes);
 
-// ============================================
-// SPA Fallback (After API Routes)
-// ============================================
-app.get('*', (req, res, next) => {
-  // Only serve index.html for non-API routes
-  if (req.path.startsWith('/api/')) {
-    return next();
-  }
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// Root
+app.get('/', (req, res) => {
+  res.json({
+    status: 'operational',
+    service: 'Border Safety API',
+    version: '2.3',
+    storage: 'in-memory'
+  });
 });
 
-// ============================================
 // Error Handler
-// ============================================
 app.use((err, req, res, next) => {
   logger.error('SERVER', err.message, { path: req.path });
   res.status(err.status || 500).json({ error: 'Internal Server Error' });
@@ -161,9 +132,9 @@ app.use((err, req, res, next) => {
 // ============================================
 app.listen(PORT, () => {
   console.log(`\n🚀 Server running on port ${PORT}`);
-  console.log(`📦 Storage: SQLite (persistent)`);
+  console.log(`📊 Storage: In-memory (Docker compatible)`);
   console.log(`🔒 Security: CSRF, Rate Limiting, IP Blocking enabled`);
-  console.log(`📝 Audit Logging: Database + Console\n`);
+  console.log(`📝 Audit Logging: Console only\n`);
 });
 
 module.exports = app;

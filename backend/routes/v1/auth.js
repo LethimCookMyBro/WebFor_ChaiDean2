@@ -16,8 +16,8 @@ const {
   verifyPassword,
   requireAuth
 } = require('../../middleware/auth');
+// const { timingSafeCompare } = require('../../utils/crypto'); // Unused
 const logger = require('../../services/logger');
-const { loginAttemptsOps, appLogsOps } = require('../../services/database');
 
 // ============================================
 // Configuration
@@ -26,27 +26,47 @@ const { loginAttemptsOps, appLogsOps } = require('../../services/database');
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
+// In-memory login attempts tracking
+const loginAttempts = new Map();
+
 // ============================================
-// Account Lockout (Using Database)
+// Account Lockout
 // ============================================
 
 function checkAccountLockout(identifier) {
-  return loginAttemptsOps.isLocked(identifier);
+  const record = loginAttempts.get(identifier);
+  if (!record) return { locked: false, remainingMs: 0 };
+  
+  const now = Date.now();
+  if (record.lockedUntil && now < record.lockedUntil) {
+    return { locked: true, remainingMs: record.lockedUntil - now };
+  }
+  if (record.lockedUntil && now >= record.lockedUntil) {
+    loginAttempts.delete(identifier);
+    return { locked: false, remainingMs: 0 };
+  }
+  return { locked: false, remainingMs: 0 };
 }
 
 function recordLoginAttempt(identifier, success) {
   if (success) {
-    loginAttemptsOps.reset(identifier);
+    loginAttempts.delete(identifier);
     return { locked: false, attemptsRemaining: MAX_LOGIN_ATTEMPTS };
   }
   
-  const result = loginAttemptsOps.recordAttempt(identifier, MAX_LOGIN_ATTEMPTS, LOCKOUT_DURATION_MS);
+  const record = loginAttempts.get(identifier) || { attempts: 0 };
+  record.attempts += 1;
+  record.lastAttempt = Date.now();
   
-  if (result.locked) {
+  if (record.attempts >= MAX_LOGIN_ATTEMPTS) {
+    record.lockedUntil = Date.now() + LOCKOUT_DURATION_MS;
+    loginAttempts.set(identifier, record);
     console.warn(`[SECURITY] Account locked: ${identifier} after ${MAX_LOGIN_ATTEMPTS} failed attempts`);
+    return { locked: true, attemptsRemaining: 0 };
   }
   
-  return result;
+  loginAttempts.set(identifier, record);
+  return { locked: false, attemptsRemaining: MAX_LOGIN_ATTEMPTS - record.attempts };
 }
 
 // ============================================
@@ -56,8 +76,8 @@ function recordLoginAttempt(identifier, success) {
 const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
-  sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax', // Lax for dev, strict for prod
-  path: '/'  // Changed from /api to / for broader scope
+  sameSite: 'strict',
+  path: '/api'
 };
 
 if (process.env.COOKIE_DOMAIN) {
@@ -132,16 +152,7 @@ router.post('/admin/login', async (req, res) => {
     
     if (!isValidPassword) {
       const result = recordLoginAttempt(identifier, false);
-      
-      // Log failed login attempt
-      appLogsOps.add('SECURITY', 'AUTH', `เข้าสู่ระบบล้มเหลว: ${username}`, {
-        username,
-        attemptsRemaining: result.attemptsRemaining,
-        locked: result.locked
-      }, clientIP);
-      
       if (result.locked) {
-        appLogsOps.add('SECURITY', 'AUTH', `บัญชีถูกล็อค: ${username}`, { username }, clientIP);
         return res.status(429).json({ error: 'Too Many Requests', message: 'บัญชีถูกล็อคชั่วคราว' });
       }
       return res.status(401).json({ error: 'Unauthorized', message: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' });
@@ -151,13 +162,6 @@ router.post('/admin/login', async (req, res) => {
     const tokens = generateTokenPair('admin', { role: 'admin', username });
     recordLoginAttempt(identifier, true);
     setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
-    
-    // Log successful login
-    appLogsOps.add('SECURITY', 'AUTH', `Admin เข้าสู่ระบบสำเร็จ: ${username}`, {
-      username,
-      role: 'admin'
-    }, clientIP);
-    
     console.log(`[SECURITY] Admin login success: ${username} from ${clientIP}`);
     
     res.json({
