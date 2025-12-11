@@ -113,6 +113,11 @@ function auditMiddleware(req, res, next) {
       return;
     }
 
+    // Skip logging for log-related endpoints (prevents circular logging)
+    if (req.path.includes('/logs') || req.path.includes('/stats')) {
+      return;
+    }
+
     // Log based on route and status
     const shouldAudit = 
       req.path.includes('/auth') ||
