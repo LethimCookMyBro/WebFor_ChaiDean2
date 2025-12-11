@@ -464,6 +464,22 @@ const visitorsOps = {
   },
 
   /**
+   * Reset all visitor stats (Admin action)
+   * Clears visits table completely
+   */
+  resetStats() {
+    try {
+      const stmt = db.prepare('DELETE FROM visitors');
+      const result = stmt.run();
+      console.log(`[DATABASE] Reset visitor stats: ${result.changes} records deleted`);
+      return result.changes;
+    } catch (e) {
+      console.error('[DATABASE] visitorsOps.resetStats error:', e.message);
+      return 0;
+    }
+  },
+
+  /**
    * Cleanup old visitors (keep last 24 hours only to save space, or keeps history?)
    * Let's keep history for "Total Users" count, but maybe clean very old data if needed.
    * For now, just keeping all to satisfy "Total Users" requirement.

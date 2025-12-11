@@ -160,6 +160,25 @@ router.get('/stats/users', (req, res) => {
 });
 
 /**
+ * DELETE /api/v1/admin/stats/users
+ * Reset all visitor stats (Admin action)
+ */
+router.delete('/stats/users', (req, res) => {
+  try {
+    const deleted = visitorsOps.resetStats();
+    console.log(`[ADMIN] Visitor stats reset by admin: ${deleted} records deleted`);
+    res.json({
+      success: true,
+      message: 'Visitor stats reset',
+      deleted
+    });
+  } catch (error) {
+    console.error('[ADMIN] Failed to reset user stats:', error.message);
+    res.status(500).json({ error: 'Failed to reset user stats' });
+  }
+});
+
+/**
  * GET /api/v1/admin/logs/stats
  * Get log statistics
  */

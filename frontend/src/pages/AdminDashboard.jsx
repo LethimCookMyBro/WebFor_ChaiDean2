@@ -881,6 +881,31 @@ export default function AdminDashboard() {
                             ครั้ง
                         </div>
                     </div>
+                    <button
+                        onClick={async () => {
+                            if (!confirm('ยืนยัน Reset สถิติผู้เข้าชมทั้งหมด?')) return;
+                            try {
+                                const res = await fetch(`${API_BASE}/api/v1/admin/stats/users`, {
+                                    method: 'DELETE',
+                                    headers: getHeaders(false),
+                                    credentials: 'include'
+                                });
+                                if (res.ok) {
+                                    setUserStats({ online: 0, total: 0, pageViews: 0 });
+                                    alert('Reset สถิติสำเร็จ!');
+                                } else {
+                                    alert('ไม่สามารถ reset ได้');
+                                }
+                            } catch (e) {
+                                console.error('Reset error:', e);
+                                alert('เกิดข้อผิดพลาด');
+                            }
+                        }}
+                        className="text-xs text-red-500 hover:text-red-700 hover:underline"
+                        title="Reset สถิติ"
+                    >
+                        🔄 Reset
+                    </button>
                 </div>
             </div>
 
