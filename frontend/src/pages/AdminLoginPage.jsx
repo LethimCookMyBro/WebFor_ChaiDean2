@@ -51,7 +51,11 @@ export default function AdminLoginPage({ onSuccess }) {
       }
       localStorage.setItem('adminSession', JSON.stringify(adminSession))
       
-      onSuccess?.()
+      // Call success callback and return (don't set loading false after reload)
+      if (onSuccess) {
+        onSuccess();
+        return; // Important: stop execution before reload
+      }
       
     } catch (err) {
       console.error('Login error:', err)
