@@ -197,6 +197,7 @@ export default function AutoLocationBanner() {
         {expanded && (
           <div className="px-4 pb-4 space-y-3">
             {/* Warning message for danger zones */}
+            {/* Warning message for danger zones */}
             {isCritical && (
               <div className="bg-red-600 text-white p-3 rounded-xl flex items-start gap-2">
                 <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
@@ -217,12 +218,23 @@ export default function AutoLocationBanner() {
               </div>
             )}
 
-            {!isDanger && (
+            {/* Caution for PHL-03 */}
+            {!isDanger && distance <= 130 && (
+              <div className="bg-yellow-500 text-white p-3 rounded-xl flex items-start gap-2">
+                <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold">⚠️ คุณอยู่ในระยะอาวุธไกล (PHL-03)</div>
+                  <div className="text-sm">ไม่อยู่ในระยะปืนใหญ่/BM-21 แต่ยังต้องเฝ้าระวัง</div>
+                </div>
+              </div>
+            )}
+
+            {distance > 130 && (
               <div className="bg-green-600 text-white p-3 rounded-xl flex items-start gap-2">
                 <Shield className="w-5 h-5 flex-shrink-0 mt-0.5" />
                 <div>
                   <div className="font-bold">✅ คุณอยู่ในพื้นที่ปลอดภัย</div>
-                  <div className="text-sm">ติดตามข่าวสารเพื่อรับข้อมูลอัพเดท</div>
+                  <div className="text-sm">อยู่นอกระยะอาวุธยิงสนับสนุนทุุกชนิด</div>
                 </div>
               </div>
             )}
