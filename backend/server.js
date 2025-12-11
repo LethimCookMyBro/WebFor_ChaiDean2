@@ -15,6 +15,7 @@ const geoRoutes = require('./routes/v1/geo');
 const reportsRoutes = require('./routes/v1/reports');
 const authRoutes = require('./routes/v1/auth');
 const adminRoutes = require('./routes/v1/admin');
+const feedbackRoutes = require('./routes/v1/feedback');
 const healthRoutes = require('./routes/health');
 
 // Services
@@ -141,6 +142,7 @@ app.use('/api/v1/status', rateLimiter, statusRoutes);
 app.use('/api/v1/geo', rateLimiter, geoRoutes);
 app.use('/api/v1/reports', rateLimiter, reportsRoutes);
 app.use('/api/v1/admin', rateLimiter, adminRoutes);
+app.use('/api/v1/feedback', rateLimiter, feedbackRoutes);
 
 // ============================================
 // SPA Catch-all - Serve index.html for React Router

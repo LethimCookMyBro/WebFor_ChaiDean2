@@ -146,3 +146,24 @@ CREATE TABLE IF NOT EXISTS visitors (
 );
 
 CREATE INDEX IF NOT EXISTS idx_visitors_last_seen ON visitors(last_seen DESC);
+
+-- ============================================
+-- Feedback (Bug Reports & Feature Requests)
+-- ============================================
+CREATE TABLE IF NOT EXISTS feedback (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,  -- 'bug' or 'feature'
+  title TEXT NOT NULL,
+  description TEXT,
+  contact TEXT,        -- email or phone (optional)
+  status TEXT DEFAULT 'pending',  -- pending, in_progress, resolved, rejected
+  ip TEXT,
+  user_agent TEXT,
+  admin_notes TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME
+);
+
+CREATE INDEX IF NOT EXISTS idx_feedback_type ON feedback(type);
+CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status);
+CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at DESC);

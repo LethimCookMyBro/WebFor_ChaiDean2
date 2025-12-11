@@ -852,6 +852,100 @@ process.on('SIGINT', () => {
 });
 
 // ============================================
+// Feedback Operations (Bug Reports & Features)
+// ============================================
+
+const feedbackOps = {
+  create(data) {
+    try {
+      const id = 'fb_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      const stmt = db.prepare(`
+        INSERT INTO feedback (id, type, title, description, contact, ip, user_agent, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'))
+      `);
+      stmt.run(id, data.type, data.title, data.description || '', data.contact || '', data.ip || '', data.userAgent || '');
+      return { id, ...data, status: 'pending' };
+    } catch (e) {
+      console.error('[DATABASE] feedbackOps.create error:', e.message);
+      return null;
+    }
+  },
+
+  getAll(limit = 100) {
+    try {
+      const stmt = db.prepare('SELECT * FROM feedback ORDER BY created_at DESC LIMIT ?');
+      return stmt.all(limit);
+    } catch (e) {
+      console.error('[DATABASE] feedbackOps.getAll error:', e.message);
+      return [];
+    }
+  },
+
+  getByStatus(status, limit = 100) {
+    try {
+      const stmt = db.prepare('SELECT * FROM feedback WHERE status = ? ORDER BY created_at DESC LIMIT ?');
+      return stmt.all(status, limit);
+    } catch (e) {
+      console.error('[DATABASE] feedbackOps.getByStatus error:', e.message);
+      return [];
+    }
+  },
+
+  update(id, updates) {
+    try {
+      const fields = [];
+      const values = [];
+      if (updates.status) { fields.push('status = ?'); values.push(updates.status); }
+      if (updates.admin_notes !== undefined) { fields.push('admin_notes = ?'); values.push(updates.admin_notes); }
+      fields.push('updated_at = datetime("now")');
+      
+      if (fields.length === 1) return null; // Only updated_at, no real changes
+      
+      values.push(id);
+      const stmt = db.prepare(`UPDATE feedback SET ${fields.join(', ')} WHERE id = ?`);
+      const result = stmt.run(...values);
+      
+      if (result.changes > 0) {
+        const getStmt = db.prepare('SELECT * FROM feedback WHERE id = ?');
+        return getStmt.get(id);
+      }
+      return null;
+    } catch (e) {
+      console.error('[DATABASE] feedbackOps.update error:', e.message);
+      return null;
+    }
+  },
+
+  delete(id) {
+    try {
+      const stmt = db.prepare('DELETE FROM feedback WHERE id = ?');
+      const result = stmt.run(id);
+      return result.changes > 0;
+    } catch (e) {
+      console.error('[DATABASE] feedbackOps.delete error:', e.message);
+      return false;
+    }
+  },
+
+  getStats() {
+    try {
+      const stats = db.prepare(`
+        SELECT 
+          COUNT(*) as total,
+          SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+          SUM(CASE WHEN type = 'bug' THEN 1 ELSE 0 END) as bugs,
+          SUM(CASE WHEN type = 'feature' THEN 1 ELSE 0 END) as features
+        FROM feedback
+      `).get();
+      return stats;
+    } catch (e) {
+      console.error('[DATABASE] feedbackOps.getStats error:', e.message);
+      return { total: 0, pending: 0, bugs: 0, features: 0 };
+    }
+  }
+};
+
+// ============================================
 // Exports
 // ============================================
 
@@ -867,6 +961,7 @@ module.exports = {
   broadcastsOps,
   reportsOps,
   appLogsOps,
+  feedbackOps,
   startCleanupJob,
   stopCleanupJob
 };
