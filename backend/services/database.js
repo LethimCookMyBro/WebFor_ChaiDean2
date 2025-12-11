@@ -418,29 +418,34 @@ const visitorsOps = {
    * - pageViews: total visits count
    */
   getStats() {
-    // Count active in last 5 minutes
-    const onlineStmt = db.prepare(`
-      SELECT COUNT(*) as count FROM visitors 
-      WHERE last_seen > datetime('now', '-5 minutes')
-    `);
-    const online = onlineStmt.get().count;
-
-    // Count total unique visitors
-    const totalStmt = db.prepare('SELECT COUNT(*) as count FROM visitors');
-    const total = totalStmt.get().count;
-
-    // Count total page views
-    let pageViews = 0;
     try {
-        const viewsStmt = db.prepare('SELECT SUM(visits) as count FROM visitors');
-        const res = viewsStmt.get();
-        pageViews = res ? res.count : 0;
-    } catch(e) {
-        // Fallback if visits column issue
-        pageViews = total; 
-    }
+        // Count active in last 5 minutes
+        const onlineStmt = db.prepare(`
+        SELECT COUNT(*) as count FROM visitors 
+        WHERE last_seen > datetime('now', '-5 minutes')
+        `);
+        const online = onlineStmt.get().count;
 
-    return { online, total, pageViews: pageViews || total };
+        // Count total unique visitors
+        const totalStmt = db.prepare('SELECT COUNT(*) as count FROM visitors');
+        const total = totalStmt.get().count;
+
+        // Count total page views
+        let pageViews = 0;
+        try {
+            const viewsStmt = db.prepare('SELECT SUM(visits) as count FROM visitors');
+            const res = viewsStmt.get();
+            pageViews = res ? res.count : 0;
+        } catch(e) {
+            // Fallback if visits column issue
+            pageViews = total; 
+        }
+
+        return { online, total, pageViews: pageViews || total };
+    } catch (e) {
+        console.error('[DATABASE] getStats error:', e.message);
+        return { online: 0, total: 0, pageViews: 0 };
+    }
   },
 
   /**

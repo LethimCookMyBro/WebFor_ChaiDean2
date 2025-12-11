@@ -153,7 +153,8 @@ router.get('/stats/users', (req, res) => {
       data: stats
     });
   } catch (error) {
-    logger.error('ADMIN', 'Failed to get user stats', { error: error.message });
+    // Log to console only to avoid spamming system logs
+    console.error('[ADMIN] Failed to get user stats:', error.message);
     res.status(500).json({ error: 'Failed to get user stats' });
   }
 });

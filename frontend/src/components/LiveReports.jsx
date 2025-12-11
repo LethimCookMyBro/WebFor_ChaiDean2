@@ -22,12 +22,7 @@ export default function LiveReports({ userLocation = null }) {
         credentials: 'include' 
       }).then(res => res.ok ? res.json() : { reports: [] });
 
-      // 2. Fetch Broadcasts
-      const broadcastsPromise = fetch(`${API_BASE}/api/v1/status/broadcasts`, { 
-        credentials: 'include' 
-      }).then(res => res.ok ? res.json() : { broadcasts: [] });
-
-      const [reportsData, broadcastsData] = await Promise.all([reportsPromise, broadcastsPromise]);
+      const reportsData = await reportsPromise;
       
       const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
@@ -38,26 +33,10 @@ export default function LiveReports({ userLocation = null }) {
         sourceType: 'report'
       }));
 
-      // Process Broadcasts (Convert to Report format)
-      const processedBroadcasts = (broadcastsData.broadcasts || []).map(b => ({
-        id: b.id,
-        type: 'warning', // Use warning icon for broadcasts
-        description: b.message,
-        location: 'แจ้งเตือนจากเจ้าหน้าที่',
-        verified: true,
-        timestamp: new Date(b.created_at || b.time),
-        severity: 'high', // Broadcasts are usually high priority
-        sourceType: 'broadcast',
-        isBroadcast: true
-      }));
+
 
       // Merge and Filter
-      const allItems = [...processedReports, ...processedBroadcasts]
-        .filter(item => item.timestamp > oneDayAgo)
-        .sort((a, b) => b.timestamp - a.timestamp)
-        .slice(0, 20);
-        
-      setReports(allItems);
+      setReports(processedReports); // Only show actual reports
       setLastFetch(new Date());
     } catch (err) {
       console.error('Error loading reports:', err)
