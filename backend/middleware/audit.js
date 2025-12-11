@@ -96,6 +96,7 @@ function logAuditEvent({
 
 /**
  * Audit middleware - automatically logs requests to sensitive endpoints
+ * ONLY logs actual actions (POST/PUT/DELETE), not reads (GET)
  */
 function auditMiddleware(req, res, next) {
   // Store original end function
@@ -105,6 +106,12 @@ function auditMiddleware(req, res, next) {
   res.end = function(chunk, encoding) {
     res.end = originalEnd;
     res.end(chunk, encoding);
+
+    // Skip GET requests - they're just reads, not actions
+    // This prevents logs from filling up during auto-refresh
+    if (req.method === 'GET') {
+      return;
+    }
 
     // Log based on route and status
     const shouldAudit = 
