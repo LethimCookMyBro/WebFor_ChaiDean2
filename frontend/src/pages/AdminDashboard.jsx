@@ -70,6 +70,12 @@ export default function AdminDashboard() {
   })
   const [threatMessage, setThreatMessage] = useState('')
 
+  // Pull-to-refresh state
+  const [pullDistance, setPullDistance] = useState(0)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [startY, setStartY] = useState(0)
+  const PULL_THRESHOLD = 80
+
   // Helper: Get CSRF token from cookie
   const getCSRFToken = () => {
     const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/)
@@ -163,6 +169,39 @@ export default function AdminDashboard() {
     const interval = setInterval(fetchData, 10000)
     return () => clearInterval(interval)
   }, [])
+
+  // Pull-to-refresh handlers
+  const handleTouchStart = (e) => {
+    if (window.scrollY === 0) {
+      setStartY(e.touches[0].clientY)
+    }
+  }
+
+  const handleTouchMove = (e) => {
+    if (startY === 0 || isRefreshing) return
+    if (window.scrollY > 0) {
+      setPullDistance(0)
+      return
+    }
+    const currentY = e.touches[0].clientY
+    const diff = currentY - startY
+    if (diff > 0) {
+      setPullDistance(Math.min(diff * 0.5, 120))
+    }
+  }
+
+  const handleTouchEnd = () => {
+    if (pullDistance >= PULL_THRESHOLD && !isRefreshing) {
+      setIsRefreshing(true)
+      setPullDistance(60)
+      setTimeout(() => {
+        window.location.reload()
+      }, 500)
+    } else {
+      setPullDistance(0)
+    }
+    setStartY(0)
+  }
 
   const handleThreatLevelChange = async (level) => {
     setThreatLevel(level)
@@ -623,8 +662,34 @@ export default function AdminDashboard() {
   const formatTime = (t) => new Date(t).toLocaleString('th-TH')
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <header className="bg-slate-900 text-white px-4 py-3 flex justify-between items-center shadow-md">
+    <div 
+      className="min-h-screen bg-slate-100"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Pull-to-refresh indicator */}
+      {pullDistance > 0 && (
+        <div 
+          className="fixed top-0 left-0 right-0 flex justify-center items-center bg-blue-500 text-white z-50 transition-all"
+          style={{ height: pullDistance }}
+        >
+          <div className="flex items-center gap-2">
+            {isRefreshing ? (
+              <>
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <span className="text-sm font-medium">กำลังรีเฟรช...</span>
+              </>
+            ) : pullDistance >= PULL_THRESHOLD ? (
+              <span className="text-sm font-medium">ปล่อยเพื่อรีเฟรช ↓</span>
+            ) : (
+              <span className="text-sm font-medium">ดึงลงเพื่อรีเฟรช...</span>
+            )}
+          </div>
+        </div>
+      )}
+      
+      <header className="bg-slate-900 text-white px-4 py-3 flex justify-between items-center shadow-md" style={{ marginTop: pullDistance }}>
         <div className="flex items-center gap-3">
             <Shield className="w-6 h-6 text-blue-400" />
             <div>

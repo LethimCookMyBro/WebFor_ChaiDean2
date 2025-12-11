@@ -92,12 +92,12 @@ router.get('/logs', (req, res) => {
     // Format logs for frontend
     const formattedLogs = filteredLogs.map(log => ({
       id: log.id,
-      timestamp: log.timestamp,
+      timestamp: log.created_at,
       level: log.level,
       category: log.category,
       message: log.message,
       ip: log.ip,
-      details: log.details ? JSON.parse(log.details) : null
+      details: log.metadata ? JSON.parse(log.metadata) : null
     }));
     
     res.json({
