@@ -212,6 +212,25 @@ router.delete('/logs', (req, res) => {
   }
 });
 
+/**
+ * DELETE /api/v1/admin/logs/:id
+ * Delete a specific log by ID (admin action)
+ */
+router.delete('/logs/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const deleted = appLogsOps.deleteById(id) || auditOps.deleteById(id);
+    if (deleted) {
+      res.json({ success: true, message: 'Log deleted' });
+    } else {
+      res.status(404).json({ error: 'Log not found' });
+    }
+  } catch (error) {
+    console.error('[ADMIN] Failed to delete log:', error.message);
+    res.status(500).json({ error: 'Failed to delete log' });
+  }
+});
+
 // ============================================
 // IP Blocking Routes
 // ============================================

@@ -397,7 +397,18 @@ const auditOps = {
       console.error('[DATABASE] auditOps.clear error:', e.message);
       return 0;
     }
-  }
+  },
+
+  deleteById(id) {
+    try {
+      const stmt = db.prepare('DELETE FROM audit_logs WHERE id = ?');
+      const result = stmt.run(id);
+      return result.changes > 0;
+    } catch (e) {
+      console.error('[DATABASE] auditOps.deleteById error:', e.message);
+      return false;
+    }
+  },
 };
 
 // ============================================
@@ -794,6 +805,17 @@ const appLogsOps = {
     } catch (e) {
       console.error('[DATABASE] appLogsOps.clear error:', e.message);
       return 0;
+    }
+  },
+
+  deleteById(id) {
+    try {
+      const stmt = db.prepare('DELETE FROM app_logs WHERE id = ?');
+      const result = stmt.run(id);
+      return result.changes > 0;
+    } catch (e) {
+      console.error('[DATABASE] appLogsOps.deleteById error:', e.message);
+      return false;
     }
   },
   
