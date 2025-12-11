@@ -22,10 +22,9 @@ const BORDER_LINE = [
 // โซนความปลอดภัย - ทั้งหมด
 const ALL_ZONES = [
   { range: 10, label: '🚨 วิกฤต', desc: '0-10 กม.', color: '#991b1b', fillOpacity: 0.35 },
-  { range: 20, label: '🔴 อันตรายสูง', desc: '10-20 กม.', color: '#dc2626', fillOpacity: 0.28 },
-  { range: 52, label: '🟠 ระยะ BM-21', desc: '20-52 กม.', color: '#ea580c', fillOpacity: 0.20 },
-  { range: 130, label: '🟡 ระยะ PHL-03', desc: '52-130 กม.', color: '#eab308', fillOpacity: 0.12 },
-  { range: 160, label: '🟢 ระยะขยาย', desc: '130-160 กม.', color: '#22c55e', fillOpacity: 0.08 },
+  { range: 52, label: '🟠 ระยะ BM-21', desc: '10-52 กม.', color: '#ea580c', fillOpacity: 0.20 },
+  { range: 90, label: '🔴 ระยะกลาง PHL-03', desc: '52-90 กม.', color: '#dc2626', fillOpacity: 0.22 },
+  { range: 130, label: '🟡 ระยะไกล PHL-03', desc: '90-130 กม.', color: '#eab308', fillOpacity: 0.12 },
 ]
 
 // อาวุธ - ระยะยิงจริง + โซนที่แสดง
@@ -45,9 +44,8 @@ const WEAPONS = {
     icon: '🎯', 
     maxRange: 130,
     zones: [
-      { range: 10, color: '#991b1b', fillOpacity: 0.40 },
-      { range: 20, color: '#dc2626', fillOpacity: 0.32 },
-      { range: 52, color: '#ea580c', fillOpacity: 0.22 },
+      { range: 70, color: '#dc2626', fillOpacity: 0.32 },
+      { range: 90, color: '#ea580c', fillOpacity: 0.22 },
       { range: 130, color: '#eab308', fillOpacity: 0.12 },
     ]
   },
