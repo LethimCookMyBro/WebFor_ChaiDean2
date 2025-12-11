@@ -31,7 +31,7 @@ export default function HomeTab({
       if (broadcastRes.ok) {
         const data = await broadcastRes.json()
         setAdminReports((data.broadcasts || []).filter(r => {
-          const reportTime = new Date(r.time)
+          const reportTime = new Date(r.created_at || r.time)
           const now = new Date()
           return (now - reportTime) < 24 * 60 * 60 * 1000
         }))
@@ -40,7 +40,7 @@ export default function HomeTab({
       // Fallback to localStorage
       const reports = JSON.parse(localStorage.getItem('adminBroadcasts') || '[]')
       setAdminReports(reports.filter(r => {
-        const reportTime = new Date(r.time)
+        const reportTime = new Date(r.created_at || r.time)
         const now = new Date()
         return (now - reportTime) < 24 * 60 * 60 * 1000
       }))

@@ -17,25 +17,48 @@ export default function LiveReports({ userLocation = null }) {
     setError(null)
     
     try {
-      // ดึงรายงานที่ยืนยันแล้วจาก API
-      const res = await fetch(`${API_BASE}/api/v1/reports?verified=true`, {
-        credentials: 'include'
-      })
+      // 1. Fetch Verified Reports
+      const reportsPromise = fetch(`${API_BASE}/api/v1/reports?verified=true`, { 
+        credentials: 'include' 
+      }).then(res => res.ok ? res.json() : { reports: [] });
+
+      // 2. Fetch Broadcasts
+      const broadcastsPromise = fetch(`${API_BASE}/api/v1/status/broadcasts`, { 
+        credentials: 'include' 
+      }).then(res => res.ok ? res.json() : { broadcasts: [] });
+
+      const [reportsData, broadcastsData] = await Promise.all([reportsPromise, broadcastsPromise]);
       
-      if (res.ok) {
-        const data = await res.json()
-        // Filter to last 24 hours
-        const now = new Date()
-        const filtered = (data.reports || []).filter(r => {
-          const reportTime = new Date(r.time)
-          return (now - reportTime) < 24 * 60 * 60 * 1000
-        }).slice(0, 20)
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+      // Process Reports
+      const processedReports = (reportsData.reports || []).map(r => ({
+        ...r,
+        timestamp: new Date(r.created_at || r.time),
+        sourceType: 'report'
+      }));
+
+      // Process Broadcasts (Convert to Report format)
+      const processedBroadcasts = (broadcastsData.broadcasts || []).map(b => ({
+        id: b.id,
+        type: 'warning', // Use warning icon for broadcasts
+        description: b.message,
+        location: 'แจ้งเตือนจากเจ้าหน้าที่',
+        verified: true,
+        timestamp: new Date(b.created_at || b.time),
+        severity: 'high', // Broadcasts are usually high priority
+        sourceType: 'broadcast',
+        isBroadcast: true
+      }));
+
+      // Merge and Filter
+      const allItems = [...processedReports, ...processedBroadcasts]
+        .filter(item => item.timestamp > oneDayAgo)
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, 20);
         
-        setReports(filtered)
-        setLastFetch(new Date())
-      } else {
-        throw new Error('API Error')
-      }
+      setReports(allItems);
+      setLastFetch(new Date());
     } catch (err) {
       console.error('Error loading reports:', err)
       setError('ไม่สามารถโหลดรายงานได้')
@@ -217,7 +240,7 @@ export default function LiveReports({ userLocation = null }) {
                     )}
                     
                     <div className="flex items-center justify-between mt-2 text-xs text-slate-500">
-                      <span>{report.timeAgo || new Date(report.time).toLocaleString('th-TH', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                      <span>{report.timeAgo || report.timestamp.toLocaleString('th-TH', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
                       <span>
                         {report.distance ? `${report.distance} กม.` : report.source || report.userName || ''}
                       </span>
