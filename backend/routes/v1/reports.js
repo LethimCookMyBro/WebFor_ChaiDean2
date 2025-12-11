@@ -19,8 +19,10 @@ router.get('/', (req, res) => {
     }
     
     // Filter by verified status if specified  
+    // SQLite stores verified as INTEGER (0 or 1), not boolean
     if (verified !== undefined) {
-      reports = reports.filter(r => r.verified === (verified === 'true' || verified === '1'));
+      const wantVerified = verified === 'true' || verified === '1';
+      reports = reports.filter(r => (r.verified === 1) === wantVerified);
     }
     
     res.json({

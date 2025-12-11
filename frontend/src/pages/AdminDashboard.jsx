@@ -196,20 +196,29 @@ export default function AdminDashboard() {
 
   // Pull-to-refresh handlers
   const handleTouchStart = (e) => {
-    if (window.scrollY === 0) {
+    // Check if we're at the top of the page
+    const scrollTop = window.scrollY || document.documentElement.scrollTop
+    if (scrollTop <= 0) {
       setStartY(e.touches[0].clientY)
     }
   }
 
   const handleTouchMove = (e) => {
     if (startY === 0 || isRefreshing) return
-    if (window.scrollY > 0) {
+    
+    const scrollTop = window.scrollY || document.documentElement.scrollTop
+    if (scrollTop > 0) {
       setPullDistance(0)
+      setStartY(0)
       return
     }
+    
     const currentY = e.touches[0].clientY
     const diff = currentY - startY
+    
     if (diff > 0) {
+      // Prevent default scrolling when pulling down
+      e.preventDefault()
       setPullDistance(Math.min(diff * 0.5, 120))
     }
   }
@@ -218,9 +227,11 @@ export default function AdminDashboard() {
     if (pullDistance >= PULL_THRESHOLD && !isRefreshing) {
       setIsRefreshing(true)
       setPullDistance(60)
-      setTimeout(() => {
-        window.location.reload()
-      }, 500)
+      // Use fetchData instead of full page reload for smoother experience
+      fetchData().then(() => {
+        setIsRefreshing(false)
+        setPullDistance(0)
+      })
     } else {
       setPullDistance(0)
     }
@@ -702,6 +713,7 @@ export default function AdminDashboard() {
   return (
     <div 
       className="min-h-screen bg-slate-100"
+      style={{ overscrollBehavior: 'none', touchAction: 'pan-y' }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}

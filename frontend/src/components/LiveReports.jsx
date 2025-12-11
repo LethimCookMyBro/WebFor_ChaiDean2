@@ -17,7 +17,7 @@ export default function LiveReports({ userLocation = null }) {
     setError(null)
     
     try {
-      // 1. Fetch Verified Reports
+      // 1. Fetch Verified Reports from the reports table
       const reportsPromise = fetch(`${API_BASE}/api/v1/reports?verified=true`, { 
         credentials: 'include' 
       }).then(res => res.ok ? res.json() : { reports: [] });
