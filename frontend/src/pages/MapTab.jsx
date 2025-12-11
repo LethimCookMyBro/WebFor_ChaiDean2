@@ -19,19 +19,19 @@ const BORDER_LINE = [
   [11.60, 102.93], [11.55, 102.92], [11.50, 102.92],
 ]
 
-// โซนความปลอดภัย - ค่า range สำหรับแสดงบนแผนที่, desc สำหรับแสดงใน Legend
+// โซนความปลอดภัย - ตามระยะอาวุธจริง
 const SAFETY_ZONES = [
-  { range: 15, label: '🔴 อันตรายสูง', desc: '0-15 กม.', color: '#dc2626', fillOpacity: 0.30 },
-  { range: 30, label: '🟠 อันตรายปานกลาง', desc: '15-30 กม.', color: '#ea580c', fillOpacity: 0.22 },
-  { range: 50, label: '🟡 ระวัง', desc: '30-50 กม.', color: '#eab308', fillOpacity: 0.15 },
-  { range: 70, label: '🟢 ค่อนข้างปลอดภัย', desc: '50-70 กม.', color: '#22c55e', fillOpacity: 0.10 },
-  { range: 100, label: '🔵 ปลอดภัย', desc: '70+ กม.', color: '#3b82f6', fillOpacity: 0.06 },
+  { range: 10, label: '🚨 วิกฤต', desc: '0-10 กม.', color: '#991b1b', fillOpacity: 0.35 },
+  { range: 20, label: '🔴 อันตรายสูง', desc: '10-20 กม.', color: '#dc2626', fillOpacity: 0.28 },
+  { range: 52, label: '🟠 BM-21', desc: '20-52 กม.', color: '#ea580c', fillOpacity: 0.20 },
+  { range: 130, label: '🟡 PHL-03', desc: '52-130 กม.', color: '#eab308', fillOpacity: 0.12 },
+  { range: 160, label: '🟢 ระยะขยาย', desc: '130-160 กม.', color: '#22c55e', fillOpacity: 0.08 },
 ]
 
-// อาวุธ - ลดขนาดลง
+// อาวุธ - ระยะยิงจริง
 const WEAPONS = {
-  mlrs: { name: 'BM-21 / Type90B', icon: '🚀', ranges: [15], colors: ['#ea580c'] },
-  phl03: { name: 'PHL-03', icon: '🎯', ranges: [25, 50], colors: ['#f87171', '#dc2626'] },
+  mlrs: { name: 'BM-21 Grad / Type90B', icon: '🚀', ranges: [52], colors: ['#ea580c'] },
+  phl03: { name: 'PHL-03', icon: '🎯', ranges: [130], colors: ['#eab308'] },
 }
 
 const TRAT_CENTER = [11.80, 102.80]
@@ -168,7 +168,7 @@ export default function MapTab() {
 
       {/* Disclaimer */}
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-2 text-center">
-        <p className="text-xs text-amber-800">⚠️ <strong>การจำลองเท่านั้น</strong> — ขนาดย่อเพื่อการแสดงผล</p>
+        <p className="text-xs text-amber-800">⚠️ <strong>การจำลองตามระยะอาวุธจริง</strong> — BM-21: 52 กม. / PHL-03: 130 กม.</p>
       </div>
     </div>
   )

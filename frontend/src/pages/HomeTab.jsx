@@ -4,6 +4,7 @@ import ThreatBanner from '../components/ThreatBanner'
 import QuickActions from '../components/QuickActions'
 import LiveReports from '../components/LiveReports'
 import ReportForm from '../components/ReportForm'
+import AutoLocationBanner from '../components/AutoLocationBanner'
 import API_BASE from '../config/api'
 
 /**
@@ -86,6 +87,9 @@ export default function HomeTab({
           <span className="text-sm">รีเฟรช</span>
         </button>
       </div>
+
+      {/* Auto Location Check - Shows danger zone warning */}
+      <AutoLocationBanner />
 
       {/* Threat Banner */}
       <ThreatBanner 
