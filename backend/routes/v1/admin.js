@@ -182,11 +182,13 @@ router.get('/logs/stats', (req, res) => {
  */
 router.delete('/logs', (req, res) => {
   try {
-    // Clear logs from database directly
-    appLogsOps.clear();
-    logger.security('ADMIN', 'Logs cleared', { ip: req.clientIp || req.ip });
-    res.json({ success: true, message: 'Logs cleared' });
+    // Clear both app logs and audit logs from database
+    const appCleared = appLogsOps.clear();
+    const auditCleared = auditOps.clear();
+    console.log(`[ADMIN] Cleared logs: app=${appCleared}, audit=${auditCleared}`);
+    res.json({ success: true, message: 'Logs cleared', cleared: { app: appCleared, audit: auditCleared } });
   } catch (error) {
+    console.error('[ADMIN] Failed to clear logs:', error.message);
     res.status(500).json({ error: 'Failed to clear logs' });
   }
 });

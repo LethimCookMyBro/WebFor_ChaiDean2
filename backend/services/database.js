@@ -382,6 +382,21 @@ const auditOps = {
   cleanup(daysToKeep = 30) {
     const stmt = db.prepare(`DELETE FROM audit_logs WHERE created_at < datetime('now', '-' || ? || ' days')`);
     return stmt.run(daysToKeep).changes;
+  },
+
+  /**
+   * Clear all audit logs
+   */
+  clear() {
+    try {
+      const stmt = db.prepare('DELETE FROM audit_logs');
+      const result = stmt.run();
+      console.log(`[DATABASE] Cleared ${result.changes} audit logs`);
+      return result.changes;
+    } catch (e) {
+      console.error('[DATABASE] auditOps.clear error:', e.message);
+      return 0;
+    }
   }
 };
 
