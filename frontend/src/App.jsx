@@ -260,8 +260,11 @@ function MainApp() {
  * Admin Login Wrapper
  */
 function AdminLoginWrapper() {
-  const navigate = useNavigate()
-  return <AdminLoginPage onSuccess={() => navigate('/admin')} />
+  const handleLoginSuccess = () => {
+    // Force reload to trigger AdminProtected re-check
+    window.location.reload();
+  };
+  return <AdminLoginPage onSuccess={handleLoginSuccess} />;
 }
 
 /**
