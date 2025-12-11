@@ -8,9 +8,6 @@
  * - Security threats (SQL injection, XSS, etc.)
  */
 
-const fs = require('fs');
-const path = require('path');
-
 // Event types
 const EVENT_TYPES = {
   AUTH_SUCCESS: 'auth_success',
@@ -28,26 +25,40 @@ const EVENT_TYPES = {
   SUSPICIOUS_ACTIVITY: 'suspicious_activity'
 };
 
-// In-memory log buffer (for batch writing)
-const logBuffer = [];
-const BUFFER_FLUSH_INTERVAL = 5000; // 5 seconds
-const MAX_BUFFER_SIZE = 100;
-
-// Database connection (set via dependency injection)
-let auditDB = null;
+// Get auditOps lazily to avoid circular dependency
+let _auditOps = null;
+function getAuditOps() {
+  if (!_auditOps) {
+    try {
+      const { auditOps } = require('../services/database');
+      _auditOps = auditOps;
+    } catch (e) {
+      console.error('[AUDIT] Failed to load auditOps:', e.message);
+    }
+  }
+  return _auditOps;
+}
 
 /**
- * Set database connection for audit logging
+ * Check if event type is a security threat
  */
-function setAuditDB(db) {
-  auditDB = db;
+function isSecurityThreat(eventType) {
+  return [
+    EVENT_TYPES.SQL_INJECTION_ATTEMPT,
+    EVENT_TYPES.XSS_ATTEMPT,
+    EVENT_TYPES.SESSION_HIJACK_ATTEMPT,
+    EVENT_TYPES.CSRF_VIOLATION,
+    EVENT_TYPES.ACCOUNT_LOCKOUT,
+    EVENT_TYPES.AUTH_FAILURE,
+    EVENT_TYPES.AUTHZ_FAILURE
+  ].includes(eventType);
 }
 
 /**
  * Log an audit event
  * @param {object} event - Audit event details
  */
-async function logAuditEvent({
+function logAuditEvent({
   eventType,
   userId = null,
   action,
@@ -58,7 +69,6 @@ async function logAuditEvent({
   metadata = null
 }) {
   const logEntry = {
-    timestamp: new Date().toISOString(),
     event_type: eventType,
     user_id: userId,
     action,
@@ -71,81 +81,16 @@ async function logAuditEvent({
 
   // Console log for immediate visibility
   const logLevel = isSecurityThreat(eventType) ? 'warn' : 'info';
-  console[logLevel](`[AUDIT] ${eventType}: ${action}`, {
-    userId,
-    ip,
-    requestId
-  });
+  console[logLevel](`[AUDIT] ${eventType}: ${action}`, { userId, ip });
 
-  // Add to buffer for batch DB writing
-  logBuffer.push(logEntry);
-
-  // Flush if buffer is full
-  if (logBuffer.length >= MAX_BUFFER_SIZE) {
-    await flushLogBuffer();
-  }
-
-  // Try to write to DB immediately for critical events
-  if (isSecurityThreat(eventType) && auditDB) {
+  // Write to database using auditOps
+  const auditOps = getAuditOps();
+  if (auditOps) {
     try {
-      await writeToDatabase(logEntry);
+      auditOps.log(logEntry);
     } catch (error) {
-      console.error('[AUDIT] Failed to write critical event to DB:', error.message);
+      console.error('[AUDIT] Failed to write to DB:', error.message);
     }
-  }
-}
-
-/**
- * Check if event type is a security threat
- */
-function isSecurityThreat(eventType) {
-  return [
-    EVENT_TYPES.SQL_INJECTION_ATTEMPT,
-    EVENT_TYPES.XSS_ATTEMPT,
-    EVENT_TYPES.SESSION_HIJACK_ATTEMPT,
-    EVENT_TYPES.CSRF_VIOLATION,
-    EVENT_TYPES.ACCOUNT_LOCKOUT
-  ].includes(eventType);
-}
-
-/**
- * Write single log entry to database
- */
-async function writeToDatabase(entry) {
-  if (!auditDB) return;
-
-  await auditDB.run(
-    `INSERT INTO audit_logs (event_type, user_id, action, resource, ip, user_agent, request_id, metadata)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      entry.event_type,
-      entry.user_id,
-      entry.action,
-      entry.resource,
-      entry.ip,
-      entry.user_agent,
-      entry.request_id,
-      entry.metadata
-    ]
-  );
-}
-
-/**
- * Flush log buffer to database
- */
-async function flushLogBuffer() {
-  if (logBuffer.length === 0 || !auditDB) return;
-
-  const entries = logBuffer.splice(0, logBuffer.length);
-
-  try {
-    for (const entry of entries) {
-      await writeToDatabase(entry);
-    }
-  } catch (error) {
-    console.error('[AUDIT] Failed to flush log buffer:', error.message);
-    // Re-add entries to buffer on failure
-    logBuffer.unshift(...entries);
   }
 }
 
@@ -244,19 +189,10 @@ function createAuditLogger(req) {
   };
 }
 
-// Periodic buffer flush
-setInterval(flushLogBuffer, BUFFER_FLUSH_INTERVAL);
-
-// Flush on process exit
-process.on('beforeExit', async () => {
-  await flushLogBuffer();
-});
-
 module.exports = {
   EVENT_TYPES,
   logAuditEvent,
   auditMiddleware,
-  createAuditLogger,
-  setAuditDB,
-  flushLogBuffer
+  createAuditLogger
 };
+
