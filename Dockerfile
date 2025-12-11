@@ -1,4 +1,4 @@
-# Force rebuild v5 - Add better-sqlite3 dependency
+# Force rebuild v6 - Fix volume permissions
 # Multi-stage Dockerfile for Border Safety - Railway Optimized
 
 # ============================================
@@ -38,19 +38,15 @@ COPY backend/ ./
 # Copy frontend build from stage 1
 COPY --from=frontend-build /app/frontend/dist ./public
 
-# Create data directory for SQLite
-RUN mkdir -p /data && chmod 755 /data
+# Create data directory for SQLite (Railway Volume will mount here)
+RUN mkdir -p /data && chmod 777 /data
 
 # Environment variables
 ENV NODE_ENV=production
 ENV DATABASE_PATH=/data/database.sqlite
 
-# Create non-root user for security
-RUN addgroup -g 1001 -S nodejs && \
-  adduser -S nodejs -u 1001 -G nodejs && \
-  chown -R nodejs:nodejs /app /data
-
-USER nodejs
+# NOTE: Not using non-root user because Railway volumes are mounted as root
+# The volume permission issue prevents nodejs user from writing to /data
 
 # Expose port (Railway injects PORT as env var)
 EXPOSE 8080
@@ -61,4 +57,3 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 
 # Start server
 CMD ["node", "server.js"]
-
