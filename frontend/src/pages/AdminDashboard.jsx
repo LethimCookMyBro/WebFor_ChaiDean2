@@ -1544,22 +1544,27 @@ export default function AdminDashboard() {
                         {/* Admin Actions */}
                         <div className="flex gap-2 mt-3">
                           <select
-                            value={fb.status}
+                            value={fb.status || 'pending'}
                             onChange={async (e) => {
+                              const newStatus = e.target.value;
                               try {
                                 const res = await fetch(`${API_BASE}/api/v1/feedback/${fb.id}`, {
                                   method: 'PUT',
                                   headers: getHeaders(true),
                                   credentials: 'include',
-                                  body: JSON.stringify({ status: e.target.value })
+                                  body: JSON.stringify({ status: newStatus })
                                 })
                                 if (res.ok) {
                                   setFeedbackList(prev => prev.map(f => 
-                                    f.id === fb.id ? { ...f, status: e.target.value } : f
+                                    f.id === fb.id ? { ...f, status: newStatus } : f
                                   ))
+                                } else {
+                                  const err = await res.json()
+                                  alert(`Update failed: ${err.error || res.statusText}`)
                                 }
                               } catch (err) {
                                 console.error('Update failed:', err)
+                                alert(`Update failed: ${err.message}`)
                               }
                             }}
                             className="text-xs border rounded px-2 py-1"
@@ -1580,9 +1585,13 @@ export default function AdminDashboard() {
                                 })
                                 if (res.ok) {
                                   setFeedbackList(prev => prev.filter(f => f.id !== fb.id))
+                                } else {
+                                  const err = await res.json()
+                                  alert(`Delete failed: ${err.error || res.statusText}`)
                                 }
                               } catch (err) {
                                 console.error('Delete failed:', err)
+                                alert(`Delete failed: ${err.message}`)
                               }
                             }}
                             className="text-xs text-red-500 hover:text-red-700"
