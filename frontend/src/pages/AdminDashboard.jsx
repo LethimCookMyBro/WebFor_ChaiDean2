@@ -67,6 +67,9 @@ export default function AdminDashboard() {
   const [broadcastSent, setBroadcastSent] = useState(false)
   const [broadcasts, setBroadcasts] = useState([])
 
+  // Feedback (Bug Reports & Feature Requests)
+  const [feedbackList, setFeedbackList] = useState([])
+
   const [threatLevel, setThreatLevel] = useState(() => {
     return localStorage.getItem('adminThreatLevel') || 'YELLOW'
   })
@@ -183,6 +186,22 @@ export default function AdminDashboard() {
       }
     } catch (e) {
       console.warn('Failed to fetch user stats')
+    }
+
+    // 8. Fetch Feedback (Bug Reports & Feature Requests)
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/feedback`, { 
+        credentials: 'include',
+        headers: getHeaders(false)
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.success && data.feedback) {
+          setFeedbackList(data.feedback)
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch feedback')
     }
 
     setLoading(false)
@@ -943,6 +962,9 @@ export default function AdminDashboard() {
             <button onClick={() => setActiveTab('security')} className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap ${activeTab === 'security' ? 'bg-red-600 text-white' : 'bg-white border text-slate-600'}`}>
                 🛡️ Security
             </button>
+            <button onClick={() => setActiveTab('feedback')} className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap ${activeTab === 'feedback' ? 'bg-purple-600 text-white' : 'bg-white border text-slate-600'}`}>
+                💬 Feedback ({feedbackList.length})
+            </button>
         </div>
 
         {/* --- REPORTS TAB --- */}
@@ -1464,6 +1486,116 @@ export default function AdminDashboard() {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* --- FEEDBACK TAB --- */}
+        {activeTab === 'feedback' && (
+          <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+            <div className="p-4 bg-purple-50 border-b">
+              <h3 className="font-bold text-purple-800 flex items-center gap-2">
+                💬 Feedback จากผู้ใช้ ({feedbackList.length} รายการ)
+              </h3>
+              <p className="text-sm text-purple-600 mt-1">Bug Reports และ Feature Requests จากผู้ใช้งาน</p>
+            </div>
+
+            {feedbackList.length === 0 ? (
+              <div className="p-8 text-center text-slate-400">
+                <p>ยังไม่มี feedback จากผู้ใช้</p>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {feedbackList.map((fb) => (
+                  <div key={fb.id} className="p-4 hover:bg-slate-50">
+                    <div className="flex items-start gap-3">
+                      <div className={`text-2xl ${fb.type === 'bug' ? 'text-red-500' : 'text-yellow-500'}`}>
+                        {fb.type === 'bug' ? '🐛' : '💡'}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            fb.type === 'bug' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
+                          }`}>
+                            {fb.type === 'bug' ? 'แจ้งบัค' : 'ขอฟีเจอร์'}
+                          </span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            fb.status === 'pending' ? 'bg-slate-100 text-slate-600' :
+                            fb.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                            fb.status === 'resolved' ? 'bg-green-100 text-green-700' :
+                            'bg-red-100 text-red-700'
+                          }`}>
+                            {fb.status === 'pending' ? '⏳ รอดำเนินการ' :
+                             fb.status === 'in_progress' ? '🔄 กำลังดำเนินการ' :
+                             fb.status === 'resolved' ? '✅ แก้ไขแล้ว' : '❌ ปฏิเสธ'}
+                          </span>
+                        </div>
+                        <h4 className="font-bold mt-1">{fb.title}</h4>
+                        {fb.description && (
+                          <p className="text-sm text-slate-600 mt-1">{fb.description}</p>
+                        )}
+                        {fb.contact && (
+                          <p className="text-xs text-slate-400 mt-1">📧 ติดต่อ: {fb.contact}</p>
+                        )}
+                        <div className="text-xs text-slate-400 mt-2 flex items-center gap-3">
+                          <span>🕐 {new Date(fb.created_at).toLocaleString('th-TH')}</span>
+                          {fb.ip && <span>📍 IP: {fb.ip}</span>}
+                        </div>
+                        
+                        {/* Admin Actions */}
+                        <div className="flex gap-2 mt-3">
+                          <select
+                            value={fb.status}
+                            onChange={async (e) => {
+                              try {
+                                const res = await fetch(`${API_BASE}/api/v1/feedback/${fb.id}`, {
+                                  method: 'PUT',
+                                  headers: getHeaders(true),
+                                  credentials: 'include',
+                                  body: JSON.stringify({ status: e.target.value })
+                                })
+                                if (res.ok) {
+                                  setFeedbackList(prev => prev.map(f => 
+                                    f.id === fb.id ? { ...f, status: e.target.value } : f
+                                  ))
+                                }
+                              } catch (err) {
+                                console.error('Update failed:', err)
+                              }
+                            }}
+                            className="text-xs border rounded px-2 py-1"
+                          >
+                            <option value="pending">⏳ รอดำเนินการ</option>
+                            <option value="in_progress">🔄 กำลังดำเนินการ</option>
+                            <option value="resolved">✅ แก้ไขแล้ว</option>
+                            <option value="rejected">❌ ปฏิเสธ</option>
+                          </select>
+                          <button
+                            onClick={async () => {
+                              if (!confirm('ลบ feedback นี้?')) return
+                              try {
+                                const res = await fetch(`${API_BASE}/api/v1/feedback/${fb.id}`, {
+                                  method: 'DELETE',
+                                  headers: getHeaders(false),
+                                  credentials: 'include'
+                                })
+                                if (res.ok) {
+                                  setFeedbackList(prev => prev.filter(f => f.id !== fb.id))
+                                }
+                              } catch (err) {
+                                console.error('Delete failed:', err)
+                              }
+                            }}
+                            className="text-xs text-red-500 hover:text-red-700"
+                          >
+                            ❌ ลบ
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </main>
