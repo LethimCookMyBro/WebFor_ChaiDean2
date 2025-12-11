@@ -973,12 +973,13 @@ export default function AdminDashboard() {
                             <tr>
                                 <th className="px-4 py-3 w-10">#</th>
                                 <th className="px-4 py-3">Time</th>
+                                <th className="px-4 py-3">IP Address</th>
                                 <th className="px-4 py-3">Message</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y">
                             {getPaginatedLogs().length === 0 ? (
-                                <tr><td colSpan="3" className="p-8 text-center text-slate-400">ไม่มี Logs</td></tr>
+                                <tr><td colSpan="4" className="p-8 text-center text-slate-400">ไม่มี Logs</td></tr>
                             ) : getPaginatedLogs().map(log => (
                                 <tr key={log.id} className="hover:bg-slate-50">
                                     <td className="px-4 py-3">
@@ -989,7 +990,16 @@ export default function AdminDashboard() {
                                             className="rounded border-slate-300"
                                         />
                                     </td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-slate-500">{formatTime(log.time)}</td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-slate-500">{formatTime(log.timestamp || log.time)}</td>
+                                    <td className="px-4 py-3">
+                                        {log.ip ? (
+                                            <span className="font-mono text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                                                {log.ip}
+                                            </span>
+                                        ) : (
+                                            <span className="text-slate-400 text-xs">-</span>
+                                        )}
+                                    </td>
                                     <td className="px-4 py-3 font-mono text-xs">{log.message}</td>
                                 </tr>
                             ))}
