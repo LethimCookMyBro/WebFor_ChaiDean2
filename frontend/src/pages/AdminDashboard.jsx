@@ -697,7 +697,7 @@ export default function AdminDashboard() {
   
   const totalLogsPages = Math.ceil(logs.length / LOGS_PER_PAGE)
 
-  const formatTime = (t) => new Date(t).toLocaleString('th-TH')
+
 
   return (
     <div 
