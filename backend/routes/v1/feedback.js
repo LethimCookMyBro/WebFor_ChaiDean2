@@ -114,7 +114,8 @@ router.put('/:id', requireAuth, requireAdmin, (req, res) => {
         debug: {
            reason: 'Update operation returned null (no changes or DB error)',
            existingRecord: existing,
-           payload: { status, admin_notes }
+           payload: { status, admin_notes },
+           receivedBody: req.body
         }
       });
     }
