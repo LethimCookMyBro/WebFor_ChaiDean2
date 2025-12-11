@@ -43,22 +43,22 @@ RUN mkdir -p /data && chmod 755 /data
 
 # Environment variables
 ENV NODE_ENV=production
-ENV PORT=3001
 ENV DATABASE_PATH=/data/database.sqlite
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001 -G nodejs && \
-    chown -R nodejs:nodejs /app /data
+  adduser -S nodejs -u 1001 -G nodejs && \
+  chown -R nodejs:nodejs /app /data
 
 USER nodejs
 
-# Expose port
-EXPOSE 3001
+# Expose port (Railway injects PORT as env var)
+EXPOSE 8080
 
-# Health check
+# Health check using Railway's PORT (default 8080)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3001/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-8080}/health || exit 1
 
 # Start server
 CMD ["node", "server.js"]
+
