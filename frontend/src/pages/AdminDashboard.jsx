@@ -190,7 +190,8 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchData()
-    const interval = setInterval(fetchData, 10000)
+    // Auto-refresh every 5 seconds for real-time stats
+    const interval = setInterval(fetchData, 5000)
     return () => clearInterval(interval)
   }, [])
 
