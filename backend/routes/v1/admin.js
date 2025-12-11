@@ -11,7 +11,7 @@
 const express = require('express');
 const router = express.Router();
 const logger = require('../../services/logger');
-const { appLogsOps } = require('../../services/database');
+const { appLogsOps, auditOps } = require('../../services/database');
 const { requireAuth, requireAdmin } = require('../../middleware/auth');
 
 // Apply auth middleware to all admin routes
@@ -77,27 +77,57 @@ router.get('/logs', (req, res) => {
     if (category) options.category = category.toUpperCase();
     if (limit) options.limit = parseInt(limit, 10);
     
-    // Use database logs instead of console logger
-    const logs = appLogsOps.getAll(options.limit || 100);
+    // Use database logs
+    const appLogs = appLogsOps.getAll(options.limit || 100);
+    
+    // Fetch Audit Logs (Security Events)
+    const auditLogs = auditOps.getRecent(options.limit || 100);
+    
+    // Format Audit Logs to match App Logs structure
+    const formattedAuditLogs = auditLogs.map(log => ({
+      id: log.id || `audit-${log.created_at}-${Math.random()}`,
+      timestamp: log.created_at,
+      level: 'SECURITY', // Force level for security tab
+      category: 'SECURITY', // Force category for security tab
+      message: `${log.event_type}: ${log.action}`,
+      ip: log.ip,
+      details: {
+        ...JSON.parse(log.metadata || '{}'),
+        resource: log.resource,
+        user_agent: log.user_agent,
+        user_id: log.user_id,
+        request_id: log.request_id
+      }
+    }));
+    
+    // Merge logs
+    let allLogs = [...appLogs, ...formattedAuditLogs];
     
     // Filter by level/category if specified
-    let filteredLogs = logs;
     if (options.level) {
-      filteredLogs = filteredLogs.filter(log => log.level === options.level);
+      allLogs = allLogs.filter(log => log.level === options.level);
     }
     if (options.category) {
-      filteredLogs = filteredLogs.filter(log => log.category === options.category);
+      allLogs = allLogs.filter(log => log.category === options.category);
     }
     
-    // Format logs for frontend
-    const formattedLogs = filteredLogs.map(log => ({
+    // Sort by timestamp desc
+    allLogs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    // Apply limit after merge
+    if (options.limit) {
+      allLogs = allLogs.slice(0, options.limit);
+    }
+    
+    // Format logs for frontend (final pass)
+    const formattedLogs = allLogs.map(log => ({
       id: log.id,
-      timestamp: log.created_at,
+      timestamp: log.timestamp,
       level: log.level,
       category: log.category,
       message: log.message,
       ip: log.ip,
-      details: log.metadata ? JSON.parse(log.metadata) : null
+      details: log.details || (log.metadata ? JSON.parse(log.metadata) : null)
     }));
     
     res.json({
