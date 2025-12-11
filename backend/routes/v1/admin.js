@@ -11,6 +11,7 @@
 const express = require('express');
 const router = express.Router();
 const logger = require('../../services/logger');
+const { appLogsOps } = require('../../services/database');
 const { requireAuth, requireAdmin } = require('../../middleware/auth');
 
 // Apply auth middleware to all admin routes
@@ -69,21 +70,40 @@ function getBlockedIPInfo(ip) {
  */
 router.get('/logs', (req, res) => {
   try {
-    const { level, category, since, search, limit } = req.query;
+    const { level, category, limit } = req.query;
     
     const options = {};
     if (level) options.level = level.toUpperCase();
     if (category) options.category = category.toUpperCase();
-    if (since) options.since = since;
-    if (search) options.search = search;
     if (limit) options.limit = parseInt(limit, 10);
     
-    const logs = logger.getLogs(options);
+    // Use database logs instead of console logger
+    const logs = appLogsOps.getAll(options.limit || 100);
+    
+    // Filter by level/category if specified
+    let filteredLogs = logs;
+    if (options.level) {
+      filteredLogs = filteredLogs.filter(log => log.level === options.level);
+    }
+    if (options.category) {
+      filteredLogs = filteredLogs.filter(log => log.category === options.category);
+    }
+    
+    // Format logs for frontend
+    const formattedLogs = filteredLogs.map(log => ({
+      id: log.id,
+      timestamp: log.timestamp,
+      level: log.level,
+      category: log.category,
+      message: log.message,
+      ip: log.ip,
+      details: log.details ? JSON.parse(log.details) : null
+    }));
     
     res.json({
       success: true,
-      count: logs.length,
-      logs
+      count: formattedLogs.length,
+      logs: formattedLogs
     });
   } catch (error) {
     logger.error('ADMIN', 'Failed to get logs', { error: error.message });
