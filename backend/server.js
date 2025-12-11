@@ -6,7 +6,7 @@ const helmet = require('helmet');
 const requestIp = require('request-ip');
 const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
-const path = require('path'); // [แก้ไข 1] เรียกใช้ module path
+const path = require('path');
 
 // Routes
 const locateRoutes = require('./routes/v1/locate');
@@ -41,6 +41,16 @@ const PORT = process.env.PORT || 3001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
 // ============================================
+// Static Files (MUST be before CORS & other middleware)
+// Static files don't need CORS and should be served immediately
+// ============================================
+app.use(express.static(path.join(__dirname, 'public'), {
+  maxAge: NODE_ENV === 'production' ? '1d' : 0,
+  etag: true,
+  index: false  // Don't serve index.html for root yet
+}));
+
+// ============================================
 // Security Middleware
 // ============================================
 
@@ -56,10 +66,6 @@ const allowedOrigins = [
   'http://127.0.0.1:5173', 'http://127.0.0.1:5174',
   process.env.FRONTEND_URL
 ].filter(Boolean);
-
-// V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V
-// โค้ดเดิม: CORS อยู่ตรงนี้
-// โค้ดใหม่: CORS ยังอยู่ตรงนี้ แต่มันไม่ควรบล็อก Static Files ที่เราจะย้ายขึ้นไปข้างบน
 
 app.use(cors({
   origin: function(origin, callback) {
@@ -132,21 +138,19 @@ app.use('/api/v1/reports', rateLimiter, reportsRoutes);
 app.use('/api/v1/admin', rateLimiter, adminRoutes);
 
 // ============================================
-// Frontend Serving Logic (แก้ไขใหม่และย้ายตำแหน่ง)
-// ต้องอยู่หลัง API Routes แต่ก่อน Error Handler
+// SPA Fallback (After API Routes)
 // ============================================
-
-// 1. Serve static files from the 'public' directory
-// Requests for static files (JS/CSS/etc.) will be handled here, skipping the error handler below
-app.use(express.static(path.join(__dirname, 'public')));
-
-// 2. Handle React Routing (SPA fallback)
-// If request doesn't match any API route or static file, send index.html
-app.get('*', (req, res) => {
+app.get('*', (req, res, next) => {
+  // Only serve index.html for non-API routes
+  if (req.path.startsWith('/api/')) {
+    return next();
+  }
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// ============================================
 // Error Handler
+// ============================================
 app.use((err, req, res, next) => {
   logger.error('SERVER', err.message, { path: req.path });
   res.status(err.status || 500).json({ error: 'Internal Server Error' });
