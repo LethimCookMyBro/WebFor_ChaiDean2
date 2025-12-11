@@ -842,11 +842,9 @@ export default function AdminDashboard() {
             <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-100">
                 <div className="flex justify-between items-start">
                     <div>
-                        <p className="text-slate-500 text-sm">ผู้ใช้งานขณะนี้ / รวม</p>
-                        <h3 className="text-2xl font-bold text-blue-600 space-x-2">
-                           <span>🟢 {userStats.online}</span>
-                           <span className="text-slate-300">/</span>
-                           <span className="text-slate-600">{userStats.total}</span>
+                        <p className="text-slate-500 text-sm">ผู้ใช้งานขณะนี้</p>
+                        <h3 className="text-2xl font-bold text-blue-600">
+                           🟢 {userStats.online} <span className="text-sm font-normal text-slate-400">คน</span>
                         </h3>
                         <div className="text-xs text-slate-400 mt-1">
                             เข้าชมทั้งหมด: <strong>{(userStats.pageViews || 0).toLocaleString()}</strong> ครั้ง
