@@ -133,22 +133,14 @@ export default function HomeTab({
       {/* Report Form (Anonymous) */}
       <ReportForm />
 
-      {/* Feedback Button */}
-      <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl p-4 border border-blue-200">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-bold text-slate-700">💬 ช่วยพัฒนาระบบ</h3>
-            <p className="text-sm text-slate-500">แจ้งปัญหาหรือเสนอไอเดียใหม่</p>
-          </div>
-          <button
-            onClick={() => setShowFeedback(true)}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl flex items-center gap-2 text-sm font-medium transition-colors"
-          >
-            <Bug className="w-4 h-4" />
-            <span>แจ้งปัญหา</span>
-          </button>
-        </div>
-      </div>
+      {/* Floating Feedback Button - Always visible bottom right */}
+      <button
+        onClick={() => setShowFeedback(true)}
+        className="fixed bottom-20 right-4 z-50 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-full shadow-lg flex items-center gap-2 text-sm font-medium transition-all hover:scale-105"
+      >
+        <Bug className="w-5 h-5" />
+        <span>แจ้งปัญหา</span>
+      </button>
     </div>
   )
 }
