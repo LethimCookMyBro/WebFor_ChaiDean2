@@ -913,6 +913,16 @@ const feedbackOps = {
     }
   },
 
+  getById(id) {
+    try {
+      const stmt = db.prepare('SELECT * FROM feedback WHERE id = ?');
+      return stmt.get(id);
+    } catch (e) {
+      console.error('[DATABASE] feedbackOps.getById error:', e.message);
+      return null;
+    }
+  },
+
   update(id, updates) {
     try {
       const fields = [];

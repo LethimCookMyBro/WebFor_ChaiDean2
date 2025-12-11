@@ -92,16 +92,37 @@ router.put('/:id', requireAuth, requireAdmin, (req, res) => {
     const { id } = req.params;
     const { status, admin_notes } = req.body;
     
+    // Debug: Check if exists
+    const existing = feedbackOps.getById(id);
+    if (!existing) {
+      return res.status(404).json({ 
+        error: 'Feedback not found', 
+        debug: { 
+          reason: 'ID not found in database',
+          receivedId: id,
+          idType: typeof id,
+          params: req.params
+        } 
+      });
+    }
+
     const updated = feedbackOps.update(id, { status, admin_notes });
     
     if (!updated) {
-      return res.status(404).json({ error: 'Feedback not found' });
+      return res.status(404).json({ 
+        error: 'Update failed', 
+        debug: {
+           reason: 'Update operation returned null (no changes or DB error)',
+           existingRecord: existing,
+           payload: { status, admin_notes }
+        }
+      });
     }
     
     res.json({ success: true, feedback: updated });
   } catch (error) {
     console.error('[FEEDBACK] Error:', error.message);
-    res.status(500).json({ error: 'Failed to update feedback' });
+    res.status(500).json({ error: 'Failed to update feedback', details: error.message });
   }
 });
 
