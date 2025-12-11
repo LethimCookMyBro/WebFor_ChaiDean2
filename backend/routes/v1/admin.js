@@ -182,7 +182,8 @@ router.get('/logs/stats', (req, res) => {
  */
 router.delete('/logs', (req, res) => {
   try {
-    logger.clearLogs();
+    // Clear logs from database directly
+    appLogsOps.clear();
     logger.security('ADMIN', 'Logs cleared', { ip: req.clientIp || req.ip });
     res.json({ success: true, message: 'Logs cleared' });
   } catch (error) {

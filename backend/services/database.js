@@ -663,6 +663,109 @@ const appLogsOps = {
     }
   },
   
+  /**
+   * Get logs with filtering options
+   * @param {object} options - { level, category, limit }
+   */
+  getLogs(options = {}) {
+    try {
+      let query = 'SELECT * FROM app_logs WHERE 1=1';
+      const params = [];
+      
+      if (options.level) {
+        query += ' AND level = ?';
+        params.push(options.level);
+      }
+      if (options.category) {
+        query += ' AND category = ?';
+        params.push(options.category);
+      }
+      
+      query += ' ORDER BY created_at DESC';
+      
+      if (options.limit) {
+        query += ' LIMIT ?';
+        params.push(options.limit);
+      } else {
+        query += ' LIMIT 100';
+      }
+      
+      const stmt = db.prepare(query);
+      return stmt.all(...params);
+    } catch (e) {
+      console.error('[DATABASE] appLogsOps.getLogs error:', e.message);
+      return [];
+    }
+  },
+  
+  /**
+   * Get log statistics
+   */
+  getStats() {
+    try {
+      const totalStmt = db.prepare('SELECT COUNT(*) as count FROM app_logs');
+      const total = totalStmt.get().count;
+      
+      // Last hour stats
+      const lastHourStmt = db.prepare(`
+        SELECT 
+          COUNT(*) as total,
+          SUM(CASE WHEN level = 'ERROR' THEN 1 ELSE 0 END) as errors,
+          SUM(CASE WHEN level = 'SECURITY' THEN 1 ELSE 0 END) as security
+        FROM app_logs 
+        WHERE created_at > datetime('now', '-1 hour')
+      `);
+      const lastHour = lastHourStmt.get();
+      
+      // Last 24 hours stats
+      const last24Stmt = db.prepare(`
+        SELECT 
+          COUNT(*) as total,
+          SUM(CASE WHEN level = 'ERROR' THEN 1 ELSE 0 END) as errors,
+          SUM(CASE WHEN level = 'SECURITY' THEN 1 ELSE 0 END) as security
+        FROM app_logs 
+        WHERE created_at > datetime('now', '-24 hours')
+      `);
+      const last24Hours = last24Stmt.get();
+      
+      return {
+        total,
+        lastHour: {
+          total: lastHour.total || 0,
+          errors: lastHour.errors || 0,
+          security: lastHour.security || 0
+        },
+        last24Hours: {
+          total: last24Hours.total || 0,
+          errors: last24Hours.errors || 0,
+          security: last24Hours.security || 0
+        }
+      };
+    } catch (e) {
+      console.error('[DATABASE] appLogsOps.getStats error:', e.message);
+      return {
+        total: 0,
+        lastHour: { total: 0, errors: 0, security: 0 },
+        last24Hours: { total: 0, errors: 0, security: 0 }
+      };
+    }
+  },
+  
+  /**
+   * Clear all logs
+   */
+  clear() {
+    try {
+      const stmt = db.prepare('DELETE FROM app_logs');
+      const result = stmt.run();
+      console.log(`[DATABASE] Cleared ${result.changes} app logs`);
+      return result.changes;
+    } catch (e) {
+      console.error('[DATABASE] appLogsOps.clear error:', e.message);
+      return 0;
+    }
+  },
+  
   deleteOlderThan(days) {
     try {
       const stmt = db.prepare(`DELETE FROM app_logs WHERE created_at < datetime('now', '-' || ? || ' days')`);

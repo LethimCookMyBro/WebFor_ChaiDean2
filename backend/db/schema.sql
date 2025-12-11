@@ -133,3 +133,16 @@ CREATE INDEX IF NOT EXISTS idx_app_logs_created ON app_logs(created_at DESC);
 -- DELETE FROM blocked_ips WHERE expires_at IS NOT NULL AND expires_at < datetime('now');
 -- DELETE FROM login_attempts WHERE locked_until IS NOT NULL AND locked_until < datetime('now');
 -- DELETE FROM app_logs WHERE created_at < datetime('now', '-30 days');
+
+-- ============================================
+-- Visitors (Online Users Tracking)
+-- ============================================
+CREATE TABLE IF NOT EXISTS visitors (
+  ip TEXT PRIMARY KEY,
+  user_agent TEXT,
+  visits INTEGER DEFAULT 1,
+  last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_visitors_last_seen ON visitors(last_seen DESC);
