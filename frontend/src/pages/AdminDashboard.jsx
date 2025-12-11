@@ -776,7 +776,7 @@ export default function AdminDashboard() {
                      <div className="mt-4 space-y-2">
                         {broadcasts.map(b => (
                             <div key={b.id} className="flex justify-between items-center bg-slate-50 p-2 rounded text-sm border">
-                                <span>{b.message} <span className="text-xs text-slate-400">({formatTime(b.time)})</span></span>
+                                <span>{b.message} <span className="text-xs text-slate-400">({formatTime(b.created_at)})</span></span>
                                 <button onClick={() => handleDeleteBroadcast(b.id)} className="text-red-500 hover:bg-red-50 p-1 rounded"><Trash2 className="w-4 h-4"/></button>
                             </div>
                         ))}
@@ -908,7 +908,7 @@ export default function AdminDashboard() {
                                             className="w-4 h-4 rounded"
                                         />
                                     </td>
-                                    <td className="px-3 py-3 whitespace-nowrap text-slate-500">{formatTime(r.time)}</td>
+                                    <td className="px-3 py-3 whitespace-nowrap text-slate-500">{formatTime(r.created_at)}</td>
                                     <td className="px-3 py-3 font-medium">{getReportTypeLabel(r.type)}</td>
                                     <td className="px-3 py-3">
                                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">

@@ -174,7 +174,8 @@ router.delete('/broadcasts/:id', requireAuth, requireAdmin, (req, res) => {
     const { id } = req.params;
     const clientIP = req.clientIp || req.ip;
     
-    const deleted = broadcastsOps.delete(parseInt(id, 10));
+    // id is TEXT format, not integer
+    const deleted = broadcastsOps.delete(id);
     
     if (!deleted) {
       return res.status(404).json({ error: 'Broadcast not found' });

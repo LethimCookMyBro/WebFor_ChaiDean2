@@ -84,7 +84,7 @@ router.put('/:id/verify', requireAuth, requireAdmin, (req, res) => {
     const { id } = req.params;
     const clientIP = req.clientIp || req.ip;
     
-    const report = reportsOps.verify(parseInt(id, 10));
+    const report = reportsOps.verify(id);
     
     if (!report) {
       return res.status(404).json({ error: 'Report not found' });
@@ -112,7 +112,7 @@ router.put('/:id', requireAuth, requireAdmin, (req, res) => {
     const updates = req.body;
     const clientIP = req.clientIp || req.ip;
     
-    const report = reportsOps.update(parseInt(id, 10), updates);
+    const report = reportsOps.update(id, updates);
     
     if (!report) {
       return res.status(404).json({ error: 'Report not found' });
@@ -139,7 +139,7 @@ router.delete('/:id', requireAuth, requireAdmin, (req, res) => {
     const { id } = req.params;
     const clientIP = req.clientIp || req.ip;
     
-    const deleted = reportsOps.delete(parseInt(id, 10));
+    const deleted = reportsOps.delete(id);
     
     if (!deleted) {
       return res.status(404).json({ error: 'Report not found' });
@@ -172,7 +172,7 @@ router.delete('/bulk', requireAuth, requireAdmin, (req, res) => {
     
     let deletedCount = 0;
     for (const id of ids) {
-      if (reportsOps.delete(parseInt(id, 10))) {
+      if (reportsOps.delete(id)) {
         deletedCount++;
       }
     }
