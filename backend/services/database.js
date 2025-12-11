@@ -123,6 +123,7 @@ function createBasicTables() {
     CREATE TABLE IF NOT EXISTS visitors (
       ip TEXT PRIMARY KEY,
       user_agent TEXT,
+      visits INTEGER DEFAULT 1,
       last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -393,11 +394,17 @@ const visitorsOps = {
    * Record visit (insert or update last_seen)
    */
   recordVisit(ip, userAgent) {
+    // Ensure column exists (migration-like check for SQLite/Turso)
+    try {
+        db.prepare("ALTER TABLE visitors ADD COLUMN visits INTEGER DEFAULT 1").run();
+    } catch (e) { /* Column likely exists */ }
+
     const stmt = db.prepare(`
-      INSERT INTO visitors (ip, user_agent, last_seen)
-      VALUES (?, ?, datetime('now'))
+      INSERT INTO visitors (ip, user_agent, visits, last_seen)
+      VALUES (?, ?, 1, datetime('now'))
       ON CONFLICT(ip) DO UPDATE SET
         last_seen = datetime('now'),
+        visits = visits + 1,
         user_agent = excluded.user_agent
     `);
     const result = stmt.run(ip, userAgent);
@@ -408,6 +415,7 @@ const visitorsOps = {
    * Get visitor stats
    * - online: active in last 5 minutes
    * - total: total unique IPs tracked
+   * - pageViews: total visits count
    */
   getStats() {
     // Count active in last 5 minutes
@@ -421,7 +429,18 @@ const visitorsOps = {
     const totalStmt = db.prepare('SELECT COUNT(*) as count FROM visitors');
     const total = totalStmt.get().count;
 
-    return { online, total };
+    // Count total page views
+    let pageViews = 0;
+    try {
+        const viewsStmt = db.prepare('SELECT SUM(visits) as count FROM visitors');
+        const res = viewsStmt.get();
+        pageViews = res ? res.count : 0;
+    } catch(e) {
+        // Fallback if visits column issue
+        pageViews = total; 
+    }
+
+    return { online, total, pageViews: pageViews || total };
   },
 
   /**

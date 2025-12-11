@@ -141,7 +141,10 @@ export default function AdminDashboard() {
       const res = await fetch(`${API_BASE}/api/v1/admin/logs`, { credentials: 'include' })
       if (res.ok) {
         const data = await res.json()
-        setLogs(data.logs || [])
+        const allLogs = data.logs || []
+        setLogs(allLogs)
+        // Set Security Logs from the same source
+        setSecurityLogs(allLogs.filter(l => l.category === 'SECURITY' || l.level === 'SECURITY'))
       }
     } catch (e) {
       const savedLogs = JSON.parse(localStorage.getItem('systemLogs') || '[]')
@@ -159,10 +162,16 @@ export default function AdminDashboard() {
       console.warn('Failed to fetch blocked IPs from API')
     }
 
-    // 6. Fetch Security Logs (local for now)
-    const savedSecLogs = JSON.parse(localStorage.getItem('securityLogs') || '[]')
-    setSecurityLogs(savedSecLogs)
-
+    // 6. Security Logs - Filter from main logs (merged in backend now)
+    // No need to fetch or load local storage separately if backend provides them in /logs
+    // But we might want to filter them into securityLogs state for easier usage
+    // Actually, let's just rely on 'logs' and filter in render, or populate securityLogs here
+    // based on 'logs' state is updated AFTER this? No, fetchData sets logs.
+    // Wait, fetchData sets setLogs(data.logs) in step 4.
+    // So here we should filter logs? But logs state isn't updated instantly in this function scope.
+    // We should rely on the API response 'data.logs' if available.
+    // Let's modify step 4 to set securityLogs too.
+    
     // 7. Fetch User Stats
     try {
       const res = await fetch(`${API_BASE}/api/v1/admin/stats/users`, { credentials: 'include' })
@@ -254,6 +263,20 @@ export default function AdminDashboard() {
   }
 
   // Helper Functions
+  const formatTime = (dateInput) => {
+    if (!dateInput) return '-'
+    try {
+      const date = new Date(dateInput)
+      if (isNaN(date.getTime())) return 'Invalid Date'
+      return date.toLocaleString('th-TH', { 
+        year: 'numeric', month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      })
+    } catch (e) {
+      return '-'
+    }
+  }
+
   const getReportTypeLabel = (type) => REPORT_TYPE_LABELS[type] || type
 
   const addSystemLog = (message) => {
@@ -813,6 +836,9 @@ export default function AdminDashboard() {
                            <span className="text-slate-300">/</span>
                            <span className="text-slate-600">{userStats.total}</span>
                         </h3>
+                        <div className="text-xs text-slate-400 mt-1">
+                            เข้าชมทั้งหมด: <strong>{(userStats.pageViews || 0).toLocaleString()}</strong> ครั้ง
+                        </div>
                     </div>
                     <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
                         <Users className="w-5 h-5" />
