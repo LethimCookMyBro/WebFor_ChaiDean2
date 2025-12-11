@@ -13,12 +13,12 @@ const TRAT_SUBDISTRICTS = {
 }
 
 const reportTypes = [
-  { id: 'explosion', label: '💥 เสียงระเบิด' },
-  { id: 'gunfire', label: '🔫 เสียงปืน' },
-  { id: 'military', label: '🪖 การเคลื่อนพล' },
-  { id: 'roadblock', label: '🚧 ถนนปิด' },
-  { id: 'evacuation', label: '🏃 จุดอพยพเปิด' },
-  { id: 'warning', label: '⚠️ แจ้งเตือนอื่นๆ' }
+  { id: 'explosion', label: '💥 เสียงระเบิด', placeholder: 'เช่น ดังกี่ครั้ง, มาจากทิศทางไหน, ดังมากแค่ไหน...' },
+  { id: 'gunfire', label: '🔫 เสียงปืน', placeholder: 'เช่น กี่นัด, ปืนยาว/ปืนสั้น, ระยะใกล้ไกล...' },
+  { id: 'military', label: '🪖 การเคลื่อนพล', placeholder: 'เช่น รถทหารกี่คัน, มุ่งหน้าทางไหน, เวลาที่เห็น...' },
+  { id: 'roadblock', label: '🚧 ถนนปิด', placeholder: 'เช่น ถนนสายไหน, ปิดตั้งแต่เมื่อไหร่, มีทางอ้อมไหม...' },
+  { id: 'evacuation', label: '🏃 จุดอพยพเปิด', placeholder: 'เช่น ชื่อสถานที่, รับได้กี่คน, มีอาหาร/น้ำไหม...' },
+  { id: 'warning', label: '⚠️ แจ้งเตือนอื่นๆ', placeholder: 'เช่น รายละเอียดเหตุการณ์ที่พบ...' }
 ]
 
 export default function ReportForm({ onSubmitSuccess }) {
@@ -255,7 +255,7 @@ export default function ReportForm({ onSubmitSuccess }) {
           {formData.locationType === 'gps' && <div className={`p-3 rounded-xl border ${location ? 'border-green-500 bg-green-50' : 'border-slate-200'}`}>{loadingLocation ? <div className="flex items-center gap-2 text-slate-500"><Loader className="w-4 h-4 animate-spin" />กำลังค้นหา...</div> : location ? <div className="flex items-center gap-2 text-green-700"><MapPin className="w-4 h-4" />{location.lat.toFixed(4)}, {location.lng.toFixed(4)}</div> : <button type="button" onClick={getGPSLocation} className="w-full flex items-center justify-center gap-2 text-blue-600 py-2"><Navigation className="w-4 h-4" />คลิกเพื่อระบุตำแหน่ง GPS</button>}</div>}
           {formData.locationType === 'manual' && <div className="space-y-2"><select value={selectedDistrict} onChange={(e) => { setSelectedDistrict(e.target.value); setSelectedSubdistrict('') }} className="w-full p-3 border rounded-xl"><option value="">-- เลือกอำเภอ --</option>{Object.keys(TRAT_SUBDISTRICTS).map(d => <option key={d} value={d}>{d}</option>)}</select>{selectedDistrict && <select value={selectedSubdistrict} onChange={(e) => setSelectedSubdistrict(e.target.value)} className="w-full p-3 border rounded-xl"><option value="">-- เลือกตำบล --</option>{TRAT_SUBDISTRICTS[selectedDistrict]?.map(s => <option key={s} value={s}>{s}</option>)}</select>}</div>}
         </div>
-        <div><label className="block text-sm font-medium text-slate-700 mb-1">รายละเอียด (ไม่บังคับ)</label><textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder="เช่น ได้ยินจากทิศทางไหน, ดังติดต่อกันกี่ครั้ง, เวลาโดยประมาณ..." rows={2} className="w-full p-3 border rounded-xl resize-none" /></div>
+        <div><label className="block text-sm font-medium text-slate-700 mb-1">รายละเอียด (ไม่บังคับ)</label><textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder={reportTypes.find(t => t.id === formData.type)?.placeholder || 'กรุณาเลือกประเภทเหตุการณ์ก่อน...'} rows={2} className="w-full p-3 border rounded-xl resize-none" /></div>
         {error && <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm flex items-center gap-2"><AlertTriangle className="w-4 h-4" />{error}</div>}
         <button type="submit" disabled={submitting || !clientIP} className="w-full py-3 bg-red-600 text-white rounded-xl font-medium flex items-center justify-center gap-2 disabled:bg-slate-300">{submitting ? <Loader className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}{submitting ? 'กำลังส่ง...' : 'ส่งรายงาน'}</button>
       </form>
