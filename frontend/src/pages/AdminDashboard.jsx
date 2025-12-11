@@ -5,6 +5,7 @@ import {
   FileText, ChevronLeft, ChevronRight, AlertTriangle, Lock, Ban,
   ExternalLink, Edit
 } from 'lucide-react'
+import API_BASE from '../config/api'
 
 // Threat levels
 const THREAT_LEVELS = {
@@ -67,12 +68,6 @@ export default function AdminDashboard() {
   const [threatLevel, setThreatLevel] = useState(() => {
     return localStorage.getItem('adminThreatLevel') || 'YELLOW'
   })
-
-  // API Base - Dynamically use current hostname for mobile compatibility
-  const API_BASE = import.meta.env.VITE_API_URL || 
-    (window.location.hostname === 'localhost' 
-      ? 'http://localhost:3001' 
-      : `http://${window.location.hostname}:3001`)
 
   // Helper: Get CSRF token from cookie
   const getCSRFToken = () => {

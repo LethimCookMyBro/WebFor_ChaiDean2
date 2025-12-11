@@ -1,11 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Radio, CheckCircle, AlertCircle, RefreshCw, MapPin, ExternalLink } from 'lucide-react'
-
-// API Base - Dynamic for mobile compatibility
-const API_BASE = import.meta.env.VITE_API_URL || 
-  (window.location.hostname === 'localhost' 
-    ? 'http://localhost:3001' 
-    : `http://${window.location.hostname}:3001`)
+import API_BASE from '../config/api'
 
 /**
  * LiveReports Component

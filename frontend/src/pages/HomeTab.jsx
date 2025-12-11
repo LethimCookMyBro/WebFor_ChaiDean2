@@ -4,12 +4,7 @@ import ThreatBanner from '../components/ThreatBanner'
 import QuickActions from '../components/QuickActions'
 import LiveReports from '../components/LiveReports'
 import ReportForm from '../components/ReportForm'
-
-// API Base - Dynamic for mobile compatibility
-const API_BASE = import.meta.env.VITE_API_URL || 
-  (window.location.hostname === 'localhost' 
-    ? 'http://localhost:3001' 
-    : `http://${window.location.hostname}:3001`)
+import API_BASE from '../config/api'
 
 /**
  * HomeTab Page

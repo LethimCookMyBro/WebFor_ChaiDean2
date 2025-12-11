@@ -6,6 +6,7 @@ const helmet = require('helmet');
 const requestIp = require('request-ip');
 const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
+const path = require('path');
 
 // Routes
 const locateRoutes = require('./routes/v1/locate');
@@ -38,6 +39,16 @@ const app = express();
 app.set('trust proxy', true);
 const PORT = process.env.PORT || 3001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
+
+// ============================================
+// Static Files (MUST be before CORS & other middleware)
+// Static files don't need CORS and should be served immediately
+// ============================================
+app.use(express.static(path.join(__dirname, 'public'), {
+  maxAge: NODE_ENV === 'production' ? '1d' : 0,
+  etag: true,
+  index: false  // Don't serve index.html for root yet
+}));
 
 // ============================================
 // Security Middleware
@@ -126,17 +137,20 @@ app.use('/api/v1/geo', rateLimiter, geoRoutes);
 app.use('/api/v1/reports', rateLimiter, reportsRoutes);
 app.use('/api/v1/admin', rateLimiter, adminRoutes);
 
-// Root
-app.get('/', (req, res) => {
-  res.json({
-    status: 'operational',
-    service: 'Border Safety API',
-    version: '2.4',
-    storage: 'SQLite (persistent)'
-  });
+// ============================================
+// SPA Fallback (After API Routes)
+// ============================================
+app.get('*', (req, res, next) => {
+  // Only serve index.html for non-API routes
+  if (req.path.startsWith('/api/')) {
+    return next();
+  }
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// ============================================
 // Error Handler
+// ============================================
 app.use((err, req, res, next) => {
   logger.error('SERVER', err.message, { path: req.path });
   res.status(err.status || 500).json({ error: 'Internal Server Error' });
@@ -153,4 +167,3 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
-

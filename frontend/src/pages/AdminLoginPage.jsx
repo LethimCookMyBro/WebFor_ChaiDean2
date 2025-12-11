@@ -1,11 +1,6 @@
 import { useState } from 'react'
 import { Shield, Lock, LogIn, Eye, EyeOff, AlertCircle } from 'lucide-react'
-
-// API base URL - Dynamically use current hostname for mobile compatibility
-const API_BASE = import.meta.env.VITE_API_URL || 
-  (window.location.hostname === 'localhost' 
-    ? 'http://localhost:3001' 
-    : `http://${window.location.hostname}:3001`)
+import API_BASE from '../config/api'
 
 export default function AdminLoginPage({ onSuccess }) {
   const [username, setUsername] = useState('')

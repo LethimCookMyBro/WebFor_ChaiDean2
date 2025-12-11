@@ -1,11 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Send, MapPin, Navigation, AlertTriangle, CheckCircle, Loader, Radio, Shield, Wifi } from 'lucide-react'
-
-// API Base - Dynamic for mobile compatibility
-const API_BASE = import.meta.env.VITE_API_URL || 
-  (window.location.hostname === 'localhost' 
-    ? 'http://localhost:3001' 
-    : `http://${window.location.hostname}:3001`)
+import API_BASE from '../config/api'
 
 const TRAT_SUBDISTRICTS = {
   "เมืองตราด": ["ชำราก", "ตะกาง", "ท่ากุ่ม", "ท่าพริก", "วังกระแจะ", "หนองคันทรง", "หนองเสม็ด", "หนองโสน", "ห้วงน้ำขาว", "ห้วยแร้ง", "อ่าวใหญ่", "เนินทราย", "แหลมกลัด"],
