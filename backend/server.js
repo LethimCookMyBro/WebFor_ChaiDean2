@@ -25,6 +25,7 @@ const { rateLimiter, sanitizeRequest, authRateLimiter } = require('./middleware/
 const { csrfTokenMiddleware, csrfValidationMiddleware } = require('./middleware/csrf');
 const { auditMiddleware } = require('./middleware/audit');
 const visitorTracker = require('./middleware/visitorTracker');
+const { additionalSecurityHeaders } = require('./middleware/securityHeaders');
 
 // Initialize Database
 try {
@@ -78,10 +79,24 @@ app.use(cors({
 }));
 
 app.use(cookieParser());
-app.use(express.json({ limit: '50kb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '20kb' })); // Reduced from 50kb for security
+app.use(express.urlencoded({ extended: true, limit: '20kb' }));
 app.use(requestIp.mw());
 app.use(sanitizeRequest);
+
+// Additional Security Headers (Permissions-Policy, Cache-Control for auth routes)
+app.use(additionalSecurityHeaders);
+
+// Request Timeout Protection (30 seconds) - prevents Slowloris attacks
+app.use((req, res, next) => {
+  req.setTimeout(30000, () => {
+    console.warn(`[SECURITY] Request timeout: ${req.method} ${req.path}`);
+    if (!res.headersSent) {
+      res.status(408).json({ error: 'Request Timeout' });
+    }
+  });
+  next();
+});
 
 if (NODE_ENV !== 'production') app.use(morgan('dev'));
 

@@ -9,21 +9,45 @@ const { requireAuth, requireAdmin } = require('../../middleware/auth');
  */
 router.post('/', (req, res) => {
   try {
-    const { type, title, description, contact } = req.body;
+    const { type, title, description, contact, website } = req.body;
     
+    // Honeypot detection - bots often fill hidden fields
+    if (website) {
+      console.log('[SECURITY] Honeypot triggered - bot detected');
+      // Return fake success to confuse bots
+      return res.status(201).json({ success: true, message: 'ส่งข้อมูลสำเร็จ' });
+    }
+    
+    // Validate required fields
     if (!type || !title) {
       return res.status(400).json({ error: 'Type and title are required' });
     }
     
+    // Validate type
     if (!['bug', 'feature'].includes(type)) {
-      return res.status(400).json({ error: 'Type must be "bug" or "feature"' });
+      return res.status(400).json({ error: 'Invalid feedback type' });
+    }
+    
+    // Validate title length (max 200 chars)
+    if (typeof title !== 'string' || title.length > 200) {
+      return res.status(400).json({ error: 'Title must be 200 characters or less' });
+    }
+    
+    // Validate description length (max 2000 chars)
+    if (description && (typeof description !== 'string' || description.length > 2000)) {
+      return res.status(400).json({ error: 'Description must be 2000 characters or less' });
+    }
+    
+    // Validate contact length (max 100 chars)
+    if (contact && (typeof contact !== 'string' || contact.length > 100)) {
+      return res.status(400).json({ error: 'Contact must be 100 characters or less' });
     }
     
     const feedback = feedbackOps.create({
       type,
-      title,
-      description,
-      contact,
+      title: title.trim(),
+      description: description ? description.trim() : '',
+      contact: contact ? contact.trim() : '',
       ip: req.clientIp || req.ip,
       userAgent: req.headers['user-agent']
     });
@@ -92,32 +116,16 @@ router.put('/:id', requireAuth, requireAdmin, (req, res) => {
     const { id } = req.params;
     const { status, admin_notes } = req.body;
     
-    // Debug: Check if exists
+    // Check if exists
     const existing = feedbackOps.getById(id);
     if (!existing) {
-      return res.status(404).json({ 
-        error: 'Feedback not found', 
-        debug: { 
-          reason: 'ID not found in database',
-          receivedId: id,
-          idType: typeof id,
-          params: req.params
-        } 
-      });
+      return res.status(404).json({ error: 'Feedback not found' });
     }
 
     const updated = feedbackOps.update(id, { status, admin_notes });
     
     if (!updated) {
-      return res.status(404).json({ 
-        error: 'Update failed', 
-        debug: {
-           reason: 'Update operation returned null (no changes or DB error)',
-           existingRecord: existing,
-           payload: { status, admin_notes },
-           receivedBody: req.body
-        }
-      });
+      return res.status(500).json({ error: 'Update failed' });
     }
     
     res.json({ success: true, feedback: updated });

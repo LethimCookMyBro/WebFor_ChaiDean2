@@ -15,12 +15,12 @@
 // ============================================
 
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
-const RATE_LIMIT_MAX = 500; // requests per window (increased for multi-device)
-const AUTH_RATE_LIMIT_MAX = 10; // auth requests per window
-const MAX_REQUEST_SIZE = 50 * 1024; // 50KB (also enforced by express.json)
+const RATE_LIMIT_MAX = 100; // requests per window (reduced from 500 for security)
+const AUTH_RATE_LIMIT_MAX = 5; // auth requests per window (reduced from 10)
+const MAX_REQUEST_SIZE = 20 * 1024; // 20KB (reduced from 50KB)
 const MAX_OBJECT_DEPTH = 10;
-const MAX_ARRAY_LENGTH = 1000;
-const MAX_STRING_LENGTH = 10000;
+const MAX_ARRAY_LENGTH = 100; // reduced from 1000
+const MAX_STRING_LENGTH = 5000; // reduced from 10000
 
 // ============================================
 // Rate Limiting (In-Memory with cleanup)

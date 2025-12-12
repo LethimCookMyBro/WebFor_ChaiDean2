@@ -40,23 +40,63 @@ router.get('/', (req, res) => {
  * POST /api/v1/reports
  * Create a new report
  */
+
+// Allowed report types
+const VALID_REPORT_TYPES = ['explosion', 'gunfire', 'military', 'roadblock', 'evacuation', 'warning', 'other'];
+
 router.post('/', (req, res) => {
   try {
-    const { type, description, location, lat, lng, district, subDistrict } = req.body;
+    const { type, description, location, lat, lng, district, subDistrict, website } = req.body;
     const clientIP = req.clientIp || req.ip;
     
+    // Honeypot detection
+    if (website) {
+      console.log('[SECURITY] Honeypot triggered on reports - bot detected');
+      return res.status(201).json({ success: true, message: 'Report submitted' });
+    }
+    
+    // Validate required fields
     if (!type) {
       return res.status(400).json({ error: 'Report type is required' });
     }
     
+    // Validate type against whitelist
+    if (!VALID_REPORT_TYPES.includes(type)) {
+      return res.status(400).json({ error: 'Invalid report type' });
+    }
+    
+    // Validate description length (max 1000 chars)
+    if (description && (typeof description !== 'string' || description.length > 1000)) {
+      return res.status(400).json({ error: 'Description must be 1000 characters or less' });
+    }
+    
+    // Validate location length (max 200 chars)
+    if (location && (typeof location !== 'string' || location.length > 200)) {
+      return res.status(400).json({ error: 'Location must be 200 characters or less' });
+    }
+    
+    // Validate coordinates if provided
+    if (lat !== undefined && lat !== null) {
+      const latNum = parseFloat(lat);
+      if (isNaN(latNum) || latNum < -90 || latNum > 90) {
+        return res.status(400).json({ error: 'Invalid latitude' });
+      }
+    }
+    if (lng !== undefined && lng !== null) {
+      const lngNum = parseFloat(lng);
+      if (isNaN(lngNum) || lngNum < -180 || lngNum > 180) {
+        return res.status(400).json({ error: 'Invalid longitude' });
+      }
+    }
+    
     const report = reportsOps.create({
       type,
-      description: description || '',
-      location: location || '',
+      description: description ? description.trim() : '',
+      location: location ? location.trim() : '',
       lat: lat || null,
       lng: lng || null,
-      district: district || '',
-      subDistrict: subDistrict || '',
+      district: district ? String(district).trim().slice(0, 100) : '',
+      subDistrict: subDistrict ? String(subDistrict).trim().slice(0, 100) : '',
       ip: clientIP,
       verified: false
     });

@@ -231,6 +231,25 @@ router.delete('/logs/:id', (req, res) => {
   }
 });
 
+/**
+ * DELETE /api/v1/admin/logs/security
+ * Clear all security/audit logs (admin action)
+ */
+router.delete('/logs/security', (req, res) => {
+  try {
+    const cleared = auditOps.clear();
+    console.log(`[ADMIN] Security logs cleared: ${cleared} records deleted`);
+    res.json({ 
+      success: true, 
+      message: 'Security logs cleared', 
+      cleared 
+    });
+  } catch (error) {
+    console.error('[ADMIN] Failed to clear security logs:', error.message);
+    res.status(500).json({ error: 'Failed to clear security logs' });
+  }
+});
+
 // ============================================
 // IP Blocking Routes
 // ============================================

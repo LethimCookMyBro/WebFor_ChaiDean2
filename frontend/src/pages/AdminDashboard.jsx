@@ -1367,7 +1367,36 @@ export default function AdminDashboard() {
 
                     {/* Security Logs */}
                     <div className="bg-white rounded-xl border p-4 shadow-sm">
-                        <h3 className="font-bold mb-4 flex items-center gap-2"><FileText className="w-5 h-5"/> Security Logs</h3>
+                        <div className="flex justify-between items-center mb-4">
+                          <h3 className="font-bold flex items-center gap-2"><FileText className="w-5 h-5"/> Security Logs ({securityLogs.length})</h3>
+                          <div className="flex gap-2 items-center">
+                            <button
+                              onClick={async () => {
+                                if (!confirm('ลบ Security Logs ทั้งหมด?')) return
+                                try {
+                                  const res = await fetch(`${API_BASE}/api/v1/admin/logs/security`, {
+                                    method: 'DELETE',
+                                    headers: getHeaders(false),
+                                    credentials: 'include'
+                                  })
+                                  if (res.ok) {
+                                    setSecurityLogs([])
+                                    alert('ลบ Security Logs สำเร็จ!')
+                                  } else {
+                                    alert('ไม่สามารถลบได้')
+                                  }
+                                } catch (e) {
+                                  console.error('Delete error:', e)
+                                  alert('เกิดข้อผิดพลาด')
+                                }
+                              }}
+                              disabled={securityLogs.length === 0}
+                              className="px-3 py-1 bg-red-500 hover:bg-red-600 disabled:bg-slate-300 text-white rounded text-xs"
+                            >
+                              🗑️ ลบทั้งหมด
+                            </button>
+                          </div>
+                        </div>
                         <div className="max-h-80 overflow-y-auto space-y-2">
                             {securityLogs.length === 0 ? <p className="text-center text-slate-400 py-4">ไม่มีประวัติความปลอดภัย</p> : securityLogs.map(log => (
                                 <div key={log.id} className={`p-2 rounded text-sm border-l-4 ${log.action === 'blocked' ? 'border-red-500 bg-red-50' : 'border-green-500 bg-green-50'}`}>
