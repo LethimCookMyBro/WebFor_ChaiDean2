@@ -936,7 +936,7 @@ const feedbackOps = {
         fields.push('admin_notes = ?'); 
         values.push(updates.admin_notes); 
       }
-      fields.push('updated_at = datetime("now")');
+      fields.push("updated_at = datetime('now')");
       
       if (fields.length === 1) return null; // Only updated_at, no real changes
       
