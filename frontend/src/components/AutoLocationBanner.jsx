@@ -29,34 +29,66 @@ export default function AutoLocationBanner() {
     return () => clearTimeout(timer)
   }, [])
 
-  // Fallback: IP-based geolocation for desktop
+  // Fallback: IP-based geolocation for desktop (with multiple fallback services)
   const checkLocationByIP = async () => {
-    try {
-      const res = await fetch('https://ipapi.co/json/')
-      if (!res.ok) throw new Error('IP lookup failed')
-      const data = await res.json()
-      
-      if (data.latitude && data.longitude) {
-        const borderResult = getDistanceToBorder(data.latitude, data.longitude)
-        const distance = borderResult.distance || borderResult.distanceRounded || borderResult
-        const level = getDistanceLevel(distance)
-        
-        setLocationResult({
-          lat: data.latitude,
-          lng: data.longitude,
-          accuracy: 5000, // IP geolocation is ~5km accuracy
-          distance,
-          level,
-          isIPBased: true,
-          city: data.city,
-          region: data.region
-        })
-        setStatus('success')
-        return true
+    // List of free IP geolocation APIs to try
+    const ipServices = [
+      {
+        url: 'https://ip-api.com/json/?fields=lat,lon,city,regionName,status',
+        parse: (data) => data.status === 'success' ? { latitude: data.lat, longitude: data.lon, city: data.city, region: data.regionName } : null
+      },
+      {
+        url: 'https://ipwho.is/',
+        parse: (data) => data.success !== false ? { latitude: data.latitude, longitude: data.longitude, city: data.city, region: data.region } : null
+      },
+      {
+        url: 'https://ipapi.co/json/',
+        parse: (data) => data.latitude ? { latitude: data.latitude, longitude: data.longitude, city: data.city, region: data.region } : null
       }
-    } catch (e) {
-      console.warn('IP geolocation failed:', e)
+    ]
+
+    for (const service of ipServices) {
+      try {
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 5000) // 5s timeout
+        
+        const res = await fetch(service.url, { 
+          signal: controller.signal,
+          headers: { 'Accept': 'application/json' }
+        })
+        clearTimeout(timeout)
+        
+        if (!res.ok) continue
+        
+        const data = await res.json()
+        const parsed = service.parse(data)
+        
+        if (parsed?.latitude && parsed?.longitude) {
+          const borderResult = getDistanceToBorder(parsed.latitude, parsed.longitude)
+          const distance = borderResult.distance || borderResult.distanceRounded || borderResult
+          const level = getDistanceLevel(distance)
+          
+          setLocationResult({
+            lat: parsed.latitude,
+            lng: parsed.longitude,
+            accuracy: 5000, // IP geolocation is ~5km accuracy
+            distance,
+            level,
+            isIPBased: true,
+            city: parsed.city,
+            region: parsed.region
+          })
+          setStatus('success')
+          console.log('IP geolocation success via:', service.url)
+          return true
+        }
+      } catch (e) {
+        console.warn('IP geolocation failed for', service.url, e.message)
+        continue // Try next service
+      }
     }
+    
+    console.error('All IP geolocation services failed')
     return false
   }
 
@@ -282,7 +314,7 @@ export default function AutoLocationBanner() {
                 </div>
               </div>
             )}
-
+9
             {/* Action buttons */}
             <div className="flex gap-2">
               <button 
