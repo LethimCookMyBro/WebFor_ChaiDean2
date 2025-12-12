@@ -56,13 +56,20 @@ app.use(helmet({
 const allowedOrigins = [
   'http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175',
   'http://127.0.0.1:5173', 'http://127.0.0.1:5174',
+  'https://webforchaidean2-production.up.railway.app',
   process.env.FRONTEND_URL
 ].filter(Boolean);
 
 app.use(cors({
   origin: function(origin, callback) {
+    // Allow requests with no origin (health checks, server-to-server, etc.)
     if (!origin) return callback(null, true);
+    // Allow all origins in development or if origin is in whitelist
     if (allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+        return callback(null, true);
+    }
+    // Allow Railway internal health checks
+    if (origin && origin.includes('railway.app')) {
         return callback(null, true);
     }
     return callback(new Error('Not allowed by CORS'), false);
