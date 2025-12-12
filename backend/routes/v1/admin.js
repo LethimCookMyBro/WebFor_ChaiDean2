@@ -213,6 +213,26 @@ router.delete('/logs', (req, res) => {
 });
 
 /**
+ * DELETE /api/v1/admin/logs/security
+ * Clear all security/audit logs (admin action)
+ * NOTE: This must come BEFORE /logs/:id to avoid matching 'security' as :id
+ */
+router.delete('/logs/security', (req, res) => {
+  try {
+    const cleared = auditOps.clear();
+    console.log(`[ADMIN] Security logs cleared: ${cleared} records deleted`);
+    res.json({ 
+      success: true, 
+      message: 'Security logs cleared', 
+      cleared 
+    });
+  } catch (error) {
+    console.error('[ADMIN] Failed to clear security logs:', error.message);
+    res.status(500).json({ error: 'Failed to clear security logs' });
+  }
+});
+
+/**
  * DELETE /api/v1/admin/logs/:id
  * Delete a specific log by ID (admin action)
  */
@@ -228,25 +248,6 @@ router.delete('/logs/:id', (req, res) => {
   } catch (error) {
     console.error('[ADMIN] Failed to delete log:', error.message);
     res.status(500).json({ error: 'Failed to delete log' });
-  }
-});
-
-/**
- * DELETE /api/v1/admin/logs/security
- * Clear all security/audit logs (admin action)
- */
-router.delete('/logs/security', (req, res) => {
-  try {
-    const cleared = auditOps.clear();
-    console.log(`[ADMIN] Security logs cleared: ${cleared} records deleted`);
-    res.json({ 
-      success: true, 
-      message: 'Security logs cleared', 
-      cleared 
-    });
-  } catch (error) {
-    console.error('[ADMIN] Failed to clear security logs:', error.message);
-    res.status(500).json({ error: 'Failed to clear security logs' });
   }
 });
 

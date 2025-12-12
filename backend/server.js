@@ -110,7 +110,7 @@ app.use((req, res, next) => {
 // Visitor Tracking (Real-time Online)
 app.use(visitorTracker);
 
-// IP Blocking Middleware (In-memory)
+// IP Blocking Middleware (In-memory) - Blocks ALL routes including /admin
 app.use((req, res, next) => {
   const clientIP = req.clientIp || req.ip;
   
@@ -118,7 +118,26 @@ app.use((req, res, next) => {
     const { isIPBlocked, getBlockedIPInfo } = require('./routes/v1/admin');
     if (isIPBlocked && isIPBlocked(clientIP)) {
       const info = getBlockedIPInfo(clientIP);
-      console.warn(`[SECURITY] ❌ Blocked request from banned IP: ${clientIP}`);
+      console.warn(`[SECURITY] ❌ Blocked request from banned IP: ${clientIP} -> ${req.method} ${req.path}`);
+      
+      // For HTML pages (not API), return a simple blocked page
+      if (!req.path.startsWith('/api') && req.accepts('html')) {
+        return res.status(403).send(`
+          <!DOCTYPE html>
+          <html>
+          <head><title>Access Denied</title></head>
+          <body style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;background:#1a1a2e;color:#fff;">
+            <div style="text-align:center;">
+              <h1 style="color:#e94560;">🚫 Access Denied</h1>
+              <p>Your IP (${clientIP}) has been blocked.</p>
+              <p style="color:#888;">${info?.reason || 'Access denied'}</p>
+            </div>
+          </body>
+          </html>
+        `);
+      }
+      
+      // For API requests, return JSON
       return res.status(403).json({
         error: 'Forbidden',
         message: 'Your IP has been blocked',
