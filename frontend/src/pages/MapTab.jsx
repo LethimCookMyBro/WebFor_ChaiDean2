@@ -94,11 +94,11 @@ export default function MapTab() {
     )
   }
 
-  // Handle map click - either set sim point or open Street View
+  // Handle map click - either set sim point or open Google Maps
   const handleMapClick = (latlng) => {
     if (streetViewMode) {
-      // Open Google Street View in new tab
-      window.open(`https://www.google.com/maps/@${latlng.lat},${latlng.lng},3a,75y,0h,90t/data=!3m4!1e1!3m2!1s!2e0`, '_blank')
+      // Open Google Maps at this location (user can drag pegman for Street View if available)
+      window.open(`https://www.google.com/maps?q=${latlng.lat},${latlng.lng}&z=18&layer=c`, '_blank')
       setStreetViewMode(false) // Turn off after use
     } else {
       setSimPoint([latlng.lat, latlng.lng])
