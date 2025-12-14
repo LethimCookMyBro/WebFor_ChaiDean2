@@ -28,34 +28,36 @@ const ALL_ZONES = [
 ]
 
 // อาวุธ - ระยะยิงจริง + โซนที่แสดงบนแผนที่
-// NOTE: ค่า range เป็นกิโลเมตร จะถูกแปลงเป็นเมตร x1000 เมื่อวาดวงกลม
+// NOTE: displayScale ใช้ลดขนาดวงกลมในแผนที่ให้ดูสมจริง (ค่าจริง x displayScale)
 const WEAPONS = {
   mlrs: { 
     name: 'BM-21 Grad / Type90B', 
     icon: '🚀', 
     maxRange: 52,  // ระยะยิงสูงสุดจริง 52 กม.
+    displayScale: 0.6,  // วาดที่ 60% ของขนาดจริง
     zones: [
-      { range: 10, color: '#991b1b', fillOpacity: 0.35, label: 'อันตรายสูง' },
-      { range: 25, color: '#dc2626', fillOpacity: 0.25, label: 'เสี่ยงสูง' },
-      { range: 52, color: '#ea580c', fillOpacity: 0.15, label: 'ระยะยิงสูงสุด' },
+      { range: 10, color: '#991b1b', fillOpacity: 0.35, label: '0-10 กม.' },
+      { range: 25, color: '#dc2626', fillOpacity: 0.25, label: '10-25 กม.' },
+      { range: 52, color: '#ea580c', fillOpacity: 0.15, label: '25-52 กม.' },
     ]
   },
   phl03: { 
     name: 'PHL-03', 
     icon: '🎯', 
-    maxRange: 70,  // ลดลงจาก 130 กม. เพื่อความสมจริงในแผนที่
+    maxRange: 130,  // ระยะยิงสูงสุดจริง 130 กม.
+    displayScale: 0.4,  // วาดที่ 40% ของขนาดจริง (เล็กลงเยอะ)
     zones: [
-      { range: 15, color: '#dc2626', fillOpacity: 0.35, label: 'อันตรายสูง' },
-      { range: 35, color: '#ea580c', fillOpacity: 0.22, label: 'เสี่ยงสูง' },
-      { range: 70, color: '#eab308', fillOpacity: 0.12, label: 'ระยะยิงสูงสุด' },
+      { range: 40, color: '#dc2626', fillOpacity: 0.35, label: '0-40 กม.' },
+      { range: 80, color: '#ea580c', fillOpacity: 0.22, label: '40-80 กม.' },
+      { range: 130, color: '#eab308', fillOpacity: 0.12, label: '80-130 กม.' },
     ]
   },
 }
 
 const TRAT_CENTER = [11.80, 102.80]
 
-function MapClickHandler({ setSimPoint }) {
-  useMapEvents({ click(e) { setSimPoint([e.latlng.lat, e.latlng.lng]) } })
+function MapClickHandler({ onMapClick }) {
+  useMapEvents({ click(e) { onMapClick(e.latlng) } })
   return null
 }
 
@@ -79,6 +81,7 @@ export default function MapTab() {
   const [loading, setLoading] = useState(false)
   const [simPoint, setSimPoint] = useState(null)
   const [weaponType, setWeaponType] = useState('mlrs')
+  const [streetViewMode, setStreetViewMode] = useState(false)
   
   const currentWeapon = WEAPONS[weaponType]
   
@@ -89,6 +92,17 @@ export default function MapTab() {
       () => { setLoading(false); alert('ไม่สามารถเข้าถึงตำแหน่งได้') },
       { enableHighAccuracy: true }
     )
+  }
+
+  // Handle map click - either set sim point or open Street View
+  const handleMapClick = (latlng) => {
+    if (streetViewMode) {
+      // Open Google Street View in new tab
+      window.open(`https://www.google.com/maps/@${latlng.lat},${latlng.lng},3a,75y,0h,90t/data=!3m4!1e1!3m2!1s!2e0`, '_blank')
+      setStreetViewMode(false) // Turn off after use
+    } else {
+      setSimPoint([latlng.lat, latlng.lng])
+    }
   }
 
   return (
@@ -116,14 +130,15 @@ export default function MapTab() {
       <div className="bg-slate-800 rounded-2xl overflow-hidden relative shadow-lg" style={{ height: '380px' }}>
         <MapContainer center={TRAT_CENTER} zoom={9} style={{ height: '100%', width: '100%' }} zoomControl={false}>
           <TileLayer attribution='&copy; OSM' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          <MapClickHandler setSimPoint={setSimPoint} />
+          <MapClickHandler onMapClick={handleMapClick} />
           
           {/* Border */}
           <Polyline positions={BORDER_LINE} pathOptions={{ color: '#dc2626', weight: 3, dashArray: '8, 6', opacity: 0.9 }} />
           
-          {/* Weapon-specific Zones */}
+          {/* Weapon-specific Zones - ใช้ displayScale ลดขนาด */}
           {simPoint && [...currentWeapon.zones].reverse().map((zone, i) => (
-            <Circle key={`zone-${i}`} center={simPoint} radius={zone.range * 1000}
+            <Circle key={`zone-${i}`} center={simPoint} 
+              radius={zone.range * 1000 * (currentWeapon.displayScale || 1)}
               pathOptions={{ 
                 color: zone.color, 
                 fillColor: zone.color, 
@@ -133,9 +148,10 @@ export default function MapTab() {
               }} />
           ))}
           
-          {/* Max Range Circle - เส้นประหนา */}
+          {/* Max Range Circle - เส้นประ (ใช้ displayScale) */}
           {simPoint && (
-            <Circle center={simPoint} radius={currentWeapon.maxRange * 1000}
+            <Circle center={simPoint} 
+              radius={currentWeapon.maxRange * 1000 * (currentWeapon.displayScale || 1)}
               pathOptions={{ 
                 color: currentWeapon.zones[currentWeapon.zones.length - 1].color, 
                 fillOpacity: 0, 
@@ -167,11 +183,31 @@ export default function MapTab() {
           <UserMarker position={userPosition} />
         </MapContainer>
         
-        {/* GPS */}
+        {/* GPS Button */}
         <button onClick={getUserLocation} disabled={loading}
           className="absolute top-3 right-3 z-[1000] bg-white text-slate-700 p-2.5 rounded-full shadow-lg hover:bg-slate-50">
           <Navigation className={`w-5 h-5 ${loading ? 'animate-spin text-blue-500' : ''}`} />
         </button>
+        
+        {/* Street View Button - 🚶 คนลาก */}
+        <button 
+          onClick={() => setStreetViewMode(!streetViewMode)}
+          className={`absolute top-16 right-3 z-[1000] p-2.5 rounded-full shadow-lg transition-all ${
+            streetViewMode 
+              ? 'bg-blue-500 text-white ring-2 ring-blue-300' 
+              : 'bg-white text-slate-700 hover:bg-slate-50'
+          }`}
+          title="กดแล้วแตะแผนที่เพื่อดู Street View"
+        >
+          <span className="text-lg">🚶</span>
+        </button>
+        
+        {/* Street View Mode Indicator */}
+        {streetViewMode && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] bg-blue-500 text-white px-3 py-1 rounded-full text-xs shadow-lg animate-pulse">
+            แตะแผนที่เพื่อเปิด Street View
+          </div>
+        )}
         
         {/* Sim Info */}
         {simPoint && (
