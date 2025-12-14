@@ -43,11 +43,11 @@ const WEAPONS = {
   phl03: { 
     name: 'PHL-03', 
     icon: '🎯', 
-    maxRange: 130,  // ระยะยิงสูงสุดจริง 130 กม.
+    maxRange: 70,  // ลดลงจาก 130 กม. เพื่อความสมจริงในแผนที่
     zones: [
-      { range: 20, color: '#dc2626', fillOpacity: 0.35, label: 'อันตรายสูง' },
-      { range: 50, color: '#ea580c', fillOpacity: 0.22, label: 'เสี่ยงสูง' },
-      { range: 90, color: '#eab308', fillOpacity: 0.12, label: 'ระยะกลาง' },
+      { range: 15, color: '#dc2626', fillOpacity: 0.35, label: 'อันตรายสูง' },
+      { range: 35, color: '#ea580c', fillOpacity: 0.22, label: 'เสี่ยงสูง' },
+      { range: 70, color: '#eab308', fillOpacity: 0.12, label: 'ระยะยิงสูงสุด' },
     ]
   },
 }
@@ -147,7 +147,21 @@ export default function MapTab() {
           
           {simPoint && (
             <Marker position={simPoint} 
-              icon={L.divIcon({ html: '<div style="font-size:16px;">💥</div>', className: '', iconAnchor: [8, 8] })} />
+              icon={L.divIcon({ html: '<div style="font-size:16px;">💥</div>', className: '', iconAnchor: [8, 8] })}>
+              <Popup>
+                <div className="text-center">
+                  <div className="font-bold mb-2">💥 จุดจำลอง</div>
+                  <a 
+                    href={`https://www.google.com/maps/@${simPoint[0]},${simPoint[1]},3a,75y,0h,90t/data=!3m6!1e1!3m4!1s!2e0!7i13312!8i6656`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
+                  >
+                    🚶 ดู Street View
+                  </a>
+                </div>
+              </Popup>
+            </Marker>
           )}
           
           <UserMarker position={userPosition} />
