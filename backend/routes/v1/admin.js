@@ -19,45 +19,38 @@ router.use(requireAuth);
 router.use(requireAdmin);
 
 // ============================================
-// Blocked IPs Store (In-Memory)
-// In production, use Redis or Database
+// Blocked IPs Store (Database-backed)
+// Changed from in-memory Map to database for persistence
 // ============================================
 
-const blockedIPs = new Map(); // Map<ip, { reason, blockedAt, blockedBy, expiresAt? }>
+const { blockedIPsOps } = require('../../services/database');
 
 /**
- * Check if an IP is blocked
+ * Check if an IP is blocked (exported for use in server.js middleware)
  * @param {string} ip 
  * @returns {boolean}
  */
 function isIPBlocked(ip) {
-  const record = blockedIPs.get(ip);
-  if (!record) return false;
-  
-  // Check expiry
-  if (record.expiresAt && Date.now() > record.expiresAt) {
-    blockedIPs.delete(ip);
+  try {
+    return blockedIPsOps.isBlocked(ip);
+  } catch (error) {
+    console.error('[ADMIN] isIPBlocked error:', error.message);
     return false;
   }
-  
-  return true;
 }
 
 /**
- * Get blocked IP info
+ * Get blocked IP info (exported for use in server.js middleware)
  * @param {string} ip 
  * @returns {object|null}
  */
 function getBlockedIPInfo(ip) {
-  const record = blockedIPs.get(ip);
-  if (!record) return null;
-  
-  if (record.expiresAt && Date.now() > record.expiresAt) {
-    blockedIPs.delete(ip);
+  try {
+    return blockedIPsOps.getInfo(ip);
+  } catch (error) {
+    console.error('[ADMIN] getBlockedIPInfo error:', error.message);
     return null;
   }
-  
-  return { ip, ...record };
 }
 
 // ============================================
@@ -257,29 +250,21 @@ router.delete('/logs/:id', (req, res) => {
 
 /**
  * GET /api/v1/admin/blocked-ips
- * Get all blocked IPs
+ * Get all blocked IPs (Database-backed)
  */
 router.get('/blocked-ips', (req, res) => {
   try {
-    const ips = [];
-    const now = Date.now();
+    const blockedList = blockedIPsOps.getAll();
     
-    for (const [ip, record] of blockedIPs.entries()) {
-      // Skip expired
-      if (record.expiresAt && now > record.expiresAt) {
-        blockedIPs.delete(ip);
-        continue;
-      }
-      
-      ips.push({
-        ip,
-        reason: record.reason,
-        blockedAt: record.blockedAt,
-        blockedBy: record.blockedBy,
-        expiresAt: record.expiresAt || null,
-        permanent: !record.expiresAt
-      });
-    }
+    // Format response
+    const ips = blockedList.map(record => ({
+      ip: record.ip,
+      reason: record.reason,
+      blockedAt: record.created_at,
+      blockedBy: record.blocked_by,
+      expiresAt: record.expires_at || null,
+      permanent: !record.expires_at
+    }));
     
     res.json({
       success: true,
@@ -287,13 +272,14 @@ router.get('/blocked-ips', (req, res) => {
       blockedIPs: ips
     });
   } catch (error) {
+    console.error('[ADMIN] Failed to get blocked IPs:', error.message);
     res.status(500).json({ error: 'Failed to get blocked IPs' });
   }
 });
 
 /**
  * POST /api/v1/admin/blocked-ips
- * Block an IP address
+ * Block an IP address (Database-backed)
  */
 router.post('/blocked-ips', (req, res) => {
   try {
@@ -318,55 +304,60 @@ router.post('/blocked-ips', (req, res) => {
     }
     
     // Check if already blocked
-    if (blockedIPs.has(cleanIP)) {
+    if (blockedIPsOps.isBlocked(cleanIP)) {
       return res.status(409).json({ error: 'IP already blocked' });
     }
     
-    // Create block record
-    const record = {
-      reason: reason || 'Manual block by admin',
-      blockedAt: new Date().toISOString(),
-      blockedBy: req.user?.username || 'admin'
-    };
-    
-    // Set expiry if duration provided (in hours)
+    // Calculate expiry if duration provided (in hours)
+    let expiresAt = null;
     if (duration && typeof duration === 'number' && duration > 0) {
-      record.expiresAt = Date.now() + (duration * 60 * 60 * 1000);
+      expiresAt = new Date(Date.now() + (duration * 60 * 60 * 1000)).toISOString();
     }
     
-    blockedIPs.set(cleanIP, record);
+    const blockedBy = req.user?.username || 'admin';
+    const reasonText = reason || 'Manual block by admin';
+    
+    // Save to database
+    blockedIPsOps.block(cleanIP, reasonText, blockedBy, expiresAt);
     
     logger.security('ADMIN', `IP blocked: ${cleanIP}`, { 
       ip: cleanIP, 
-      reason: record.reason,
-      blockedBy: record.blockedBy 
+      reason: reasonText,
+      blockedBy: blockedBy 
     });
     
-    console.log(`[SECURITY] ❌ IP blocked: ${cleanIP} by ${record.blockedBy}`);
+    console.log(`[SECURITY] ❌ IP blocked: ${cleanIP} by ${blockedBy}`);
     
     res.json({
       success: true,
       message: `IP ${cleanIP} blocked successfully`,
-      record: { ip: cleanIP, ...record }
+      record: { 
+        ip: cleanIP, 
+        reason: reasonText, 
+        blockedBy,
+        expiresAt 
+      }
     });
   } catch (error) {
+    console.error('[ADMIN] Failed to block IP:', error.message);
     res.status(500).json({ error: 'Failed to block IP' });
   }
 });
 
 /**
  * DELETE /api/v1/admin/blocked-ips/:ip
- * Unblock an IP address
+ * Unblock an IP address (Database-backed)
  */
 router.delete('/blocked-ips/:ip', (req, res) => {
   try {
     const ip = req.params.ip;
     
-    if (!blockedIPs.has(ip)) {
+    // Try to unblock from database
+    const success = blockedIPsOps.unblock(ip);
+    
+    if (!success) {
       return res.status(404).json({ error: 'IP not found in blocked list' });
     }
-    
-    blockedIPs.delete(ip);
     
     logger.security('ADMIN', `IP unblocked: ${ip}`, { 
       ip, 
@@ -380,6 +371,7 @@ router.delete('/blocked-ips/:ip', (req, res) => {
       message: `IP ${ip} unblocked successfully`
     });
   } catch (error) {
+    console.error('[ADMIN] Failed to unblock IP:', error.message);
     res.status(500).json({ error: 'Failed to unblock IP' });
   }
 });
@@ -388,5 +380,3 @@ router.delete('/blocked-ips/:ip', (req, res) => {
 module.exports = router;
 module.exports.isIPBlocked = isIPBlocked;
 module.exports.getBlockedIPInfo = getBlockedIPInfo;
-module.exports.blockedIPs = blockedIPs;
-

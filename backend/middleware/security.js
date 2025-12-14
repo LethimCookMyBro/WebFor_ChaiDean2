@@ -34,7 +34,7 @@ const requestCounts = new Map();
  * Note: For production with multiple servers, use Redis
  */
 function rateLimiter(req, res, next) {
-  const ip = req.clientIp || req.ip || 'unknown';
+  const ip = req.clientIp || req.ip | | 'unknown';
   const now = Date.now();
   
   // Lazy load autoBlocker to avoid circular dependencies

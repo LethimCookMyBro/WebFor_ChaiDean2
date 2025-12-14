@@ -26,47 +26,44 @@ const logger = require('../../services/logger');
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
-// In-memory login attempts tracking
-const loginAttempts = new Map();
+// Database-backed login attempts (persists across restarts)
+const { loginAttemptsOps } = require('../../services/database');
 
 // ============================================
-// Account Lockout
+// Account Lockout (Database-backed)
 // ============================================
 
+/**
+ * Check if account is locked due to too many failed attempts
+ * @param {string} identifier - Unique identifier (e.g., "admin:username:ip")
+ * @returns {{ locked: boolean, remainingMs: number }}
+ */
 function checkAccountLockout(identifier) {
-  const record = loginAttempts.get(identifier);
-  if (!record) return { locked: false, remainingMs: 0 };
-  
-  const now = Date.now();
-  if (record.lockedUntil && now < record.lockedUntil) {
-    return { locked: true, remainingMs: record.lockedUntil - now };
-  }
-  if (record.lockedUntil && now >= record.lockedUntil) {
-    loginAttempts.delete(identifier);
+  try {
+    return loginAttemptsOps.isLocked(identifier);
+  } catch (error) {
+    console.error('[AUTH] checkAccountLockout error:', error.message);
     return { locked: false, remainingMs: 0 };
   }
-  return { locked: false, remainingMs: 0 };
 }
 
+/**
+ * Record a login attempt and potentially lock the account
+ * @param {string} identifier - Unique identifier
+ * @param {boolean} success - Whether login was successful
+ * @returns {{ locked: boolean, attemptsRemaining: number }}
+ */
 function recordLoginAttempt(identifier, success) {
-  if (success) {
-    loginAttempts.delete(identifier);
+  try {
+    if (success) {
+      loginAttemptsOps.reset(identifier);
+      return { locked: false, attemptsRemaining: MAX_LOGIN_ATTEMPTS };
+    }
+    return loginAttemptsOps.recordAttempt(identifier, MAX_LOGIN_ATTEMPTS, LOCKOUT_DURATION_MS);
+  } catch (error) {
+    console.error('[AUTH] recordLoginAttempt error:', error.message);
     return { locked: false, attemptsRemaining: MAX_LOGIN_ATTEMPTS };
   }
-  
-  const record = loginAttempts.get(identifier) || { attempts: 0 };
-  record.attempts += 1;
-  record.lastAttempt = Date.now();
-  
-  if (record.attempts >= MAX_LOGIN_ATTEMPTS) {
-    record.lockedUntil = Date.now() + LOCKOUT_DURATION_MS;
-    loginAttempts.set(identifier, record);
-    console.warn(`[SECURITY] Account locked: ${identifier} after ${MAX_LOGIN_ATTEMPTS} failed attempts`);
-    return { locked: true, attemptsRemaining: 0 };
-  }
-  
-  loginAttempts.set(identifier, record);
-  return { locked: false, attemptsRemaining: MAX_LOGIN_ATTEMPTS - record.attempts };
 }
 
 // ============================================

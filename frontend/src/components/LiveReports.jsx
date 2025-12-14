@@ -232,16 +232,20 @@ export default function LiveReports({ userLocation = null }) {
         )}
       </div>
       
-      {/* Footer */}
-      {reports.length > 0 && (
+      {/* Footer - Only show if there are more than 3 reports */}
+      {reports.length > 3 && (
         <div className="p-3 border-t border-slate-700 text-center">
-          <a 
-            href="#" 
-            className="text-xs text-blue-400 hover:underline flex items-center justify-center gap-1"
+          <button 
+            onClick={() => {
+              // Scroll to make all reports visible
+              const container = document.querySelector('.max-h-80.overflow-y-auto');
+              if (container) container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+            }}
+            className="text-xs text-blue-400 hover:underline flex items-center justify-center gap-1 w-full"
           >
-            ดูรายงานทั้งหมด
+            ดูรายงานทั้งหมด ({reports.length} รายการ)
             <ExternalLink className="w-3 h-3" />
-          </a>
+          </button>
         </div>
       )}
     </div>

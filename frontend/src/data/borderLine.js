@@ -272,7 +272,7 @@ export const getDistanceLevel = (distanceKm) => {
     bgColor: '#dcfce7',
     emoji: '✅',
     text: 'นอกระยะอาวุธ',
-    description: 'อยู่ห่างจากชายแดนมากกว่า 130 กม.'
+    description: 'อยู่ห่างจากชายแดนและจุดที่มีโอกาสเป็นจุดยิงมากกว่า 130 กม.'
   }
 }
 

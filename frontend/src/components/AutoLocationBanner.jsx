@@ -314,7 +314,7 @@ export default function AutoLocationBanner() {
                 </div>
               </div>
             )}
-9
+
             {/* Action buttons */}
             <div className="flex gap-2">
               <button 
