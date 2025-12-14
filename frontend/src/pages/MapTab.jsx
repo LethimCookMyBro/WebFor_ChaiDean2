@@ -45,9 +45,9 @@ const WEAPONS = {
     icon: '🎯', 
     maxRange: 130,  // ระยะยิงสูงสุดจริง 130 กม.
     zones: [
-      { range: 40, color: '#dc2626', fillOpacity: 0.30, label: 'อันตรายสูง' },
-      { range: 80, color: '#ea580c', fillOpacity: 0.20, label: 'เสี่ยงสูง' },
-      { range: 130, color: '#eab308', fillOpacity: 0.10, label: 'ระยะยิงสูงสุด' },
+      { range: 20, color: '#dc2626', fillOpacity: 0.35, label: 'อันตรายสูง' },
+      { range: 50, color: '#ea580c', fillOpacity: 0.22, label: 'เสี่ยงสูง' },
+      { range: 90, color: '#eab308', fillOpacity: 0.12, label: 'ระยะกลาง' },
     ]
   },
 }
