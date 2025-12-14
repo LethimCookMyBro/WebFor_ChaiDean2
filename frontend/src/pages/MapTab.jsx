@@ -81,7 +81,6 @@ export default function MapTab() {
   const [loading, setLoading] = useState(false)
   const [simPoint, setSimPoint] = useState(null)
   const [weaponType, setWeaponType] = useState('mlrs')
-  const [streetViewMode, setStreetViewMode] = useState(false)
   
   const currentWeapon = WEAPONS[weaponType]
   
@@ -92,17 +91,6 @@ export default function MapTab() {
       () => { setLoading(false); alert('ไม่สามารถเข้าถึงตำแหน่งได้') },
       { enableHighAccuracy: true }
     )
-  }
-
-  // Handle map click - either set sim point or open Google Maps
-  const handleMapClick = (latlng) => {
-    if (streetViewMode) {
-      // Open Google Maps at this location (user can drag pegman for Street View if available)
-      window.open(`https://www.google.com/maps?q=${latlng.lat},${latlng.lng}&z=18&layer=c`, '_blank')
-      setStreetViewMode(false) // Turn off after use
-    } else {
-      setSimPoint([latlng.lat, latlng.lng])
-    }
   }
 
   return (
@@ -130,7 +118,7 @@ export default function MapTab() {
       <div className="bg-slate-800 rounded-2xl overflow-hidden relative shadow-lg" style={{ height: '380px' }}>
         <MapContainer center={TRAT_CENTER} zoom={9} style={{ height: '100%', width: '100%' }} zoomControl={false}>
           <TileLayer attribution='&copy; OSM' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          <MapClickHandler onMapClick={handleMapClick} />
+          <MapClickHandler onMapClick={(latlng) => setSimPoint([latlng.lat, latlng.lng])} />
           
           {/* Border */}
           <Polyline positions={BORDER_LINE} pathOptions={{ color: '#dc2626', weight: 3, dashArray: '8, 6', opacity: 0.9 }} />
@@ -163,21 +151,7 @@ export default function MapTab() {
           
           {simPoint && (
             <Marker position={simPoint} 
-              icon={L.divIcon({ html: '<div style="font-size:16px;">💥</div>', className: '', iconAnchor: [8, 8] })}>
-              <Popup>
-                <div className="text-center">
-                  <div className="font-bold mb-2">💥 จุดจำลอง</div>
-                  <a 
-                    href={`https://www.google.com/maps/@${simPoint[0]},${simPoint[1]},3a,75y,0h,90t/data=!3m6!1e1!3m4!1s!2e0!7i13312!8i6656`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
-                  >
-                    🚶 ดู Street View
-                  </a>
-                </div>
-              </Popup>
-            </Marker>
+              icon={L.divIcon({ html: '<div style="font-size:16px;">💥</div>', className: '', iconAnchor: [8, 8] })} />
           )}
           
           <UserMarker position={userPosition} />
@@ -189,26 +163,7 @@ export default function MapTab() {
           <Navigation className={`w-5 h-5 ${loading ? 'animate-spin text-blue-500' : ''}`} />
         </button>
         
-        {/* Street View Button - 🚶 คนลาก */}
-        <button 
-          onClick={() => setStreetViewMode(!streetViewMode)}
-          className={`absolute top-16 right-3 z-[1000] p-2.5 rounded-full shadow-lg transition-all ${
-            streetViewMode 
-              ? 'bg-blue-500 text-white ring-2 ring-blue-300' 
-              : 'bg-white text-slate-700 hover:bg-slate-50'
-          }`}
-          title="กดแล้วแตะแผนที่เพื่อดู Street View"
-        >
-          <span className="text-lg">🚶</span>
-        </button>
-        
-        {/* Street View Mode Indicator */}
-        {streetViewMode && (
-          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] bg-blue-500 text-white px-3 py-1 rounded-full text-xs shadow-lg animate-pulse">
-            แตะแผนที่เพื่อเปิด Street View
-          </div>
-        )}
-        
+
         {/* Sim Info */}
         {simPoint && (
           <div className="absolute top-3 left-3 z-[1000] bg-white/95 backdrop-blur rounded-lg p-2 text-[10px] shadow-lg">
